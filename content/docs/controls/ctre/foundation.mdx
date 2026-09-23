@@ -1,0 +1,112 @@
+---
+title: Foundations
+description: Output families, gain slots, feedforward, profiles, and the general tuning workflow.
+---
+
+## 1.1 The Phoenix 6 Output Families
+
+Every closed-loop request in Phoenix 6 belongs to one of three output families. The family sets the units of every gain you tune.
+
+| Family | Example Requests | Output Units | When to Use |
+|:---|:---|:---|:---|
+| **DutyCycle** | `VelocityDutyCycle`, `PositionDutyCycle`, `MotionMagicDutyCycle` | Fraction of supply, [-1, 1] | Early bring-up only. Battery sag changes behavior. |
+| **Voltage** | `VelocityVoltage`, `PositionVoltage`, `MotionMagicVoltage` | Volts | Default for nearly everything. Compensates for battery sag. |
+| **TorqueCurrent (FOC)** | `VelocityTorqueCurrentFOC`, `PositionTorqueCurrentFOC`, `MotionMagicTorqueCurrentFOC` | Amps (torque-producing stator current) | Needs Phoenix Pro (Kraken X60/X44). Controls torque directly. |
+
+**Gains do not transfer between families.** The units and the physics differ, so moving a mechanism from voltage to torque-current means re-tuning it from scratch.
+
+## 1.2 The Gain Slot Model
+
+Each motor has three gain slots (`Slot0`–`Slot2`), and the request picks which one to use. Every slot holds the same set of gains, which combine like this:
+
+$$
+u(t) = \underbrace{k_S \cdot \sigma_{\text{kS}} + k_V \cdot v_{\text{ref}} + k_A \cdot a_{\text{ref}} + k_G \cdot g(\theta)}_{\text{feedforward}} + \underbrace{k_P \cdot e + k_I \int e\,dt + k_D \cdot \dot{e}}_{\text{feedback (PID)}}
+$$
+
+Where:
+- $u(t)$ is the controller output (Volts or Amps depending on family)
+- $e = x_{\text{ref}} - x_{\text{measured}}$ is the tracking error
+- $v_{\text{ref}}$, $a_{\text{ref}}$ are the reference velocity and acceleration (from a profile, or passed in the request)
+- $g(\theta)$ is the gravity term: $\cos(\theta)$ with `GravityType = Arm_Cosine`, $1$ with `Elevator_Static` (the default). Mechanisms without gravity load simply use kG = 0
+- $\sigma_{\text{kS}} \in \lbrace-1, 0, +1\rbrace$ is the sign applied to kS. Where it comes from depends on the control mode and the `StaticFeedforwardSign` config (see [§1.2.1](#121-the-staticfeedforwardsign-config))
+
+| Gain | Meaning | Unit (Voltage Mode) | Unit (Torque Mode) |
+|:---|:---|:---|:---|
+| **kP** | Output per unit error | V / (mechanism unit) | A / (mechanism unit) |
+| **kI** | Output per unit accumulated error | V / (mechanism unit · s) | A / (mechanism unit · s) |
+| **kD** | Output per unit error rate | V / (mechanism unit / s) | A / (mechanism unit / s) |
+| **kS** | Static friction compensation | V | A |
+| **kV** | Velocity feedforward | V / (rotation/s) | A / (rotation/s) — typically 0 |
+| **kA** | Acceleration feedforward | V / (rotation/s²) | A / (rotation/s²), set by inertia (see [§3.0.3](/docs/controls/ctre/torque-current#303-feedforward-in-torque-mode)) |
+| **kG** | Gravity feedforward | V | A |
+
+### 1.2.1 The `StaticFeedforwardSign` Config
+
+kS pushes against static friction, so its sign has to match the direction the mechanism is trying to move. The `StaticFeedforwardSign` field in each gain slot (`Slot0Configs.StaticFeedforwardSign`, etc.) picks where that sign comes from:
+
+| Value | $\sigma_{\text{kS}}$ comes from | Use it for |
+|:---|:---|:---|
+| `UseVelocitySign` *(default)* | $\mathrm{sgn}(v_{\text{ref}})$, the sign of the velocity reference | Motion Magic, and any position request where you pass a velocity. |
+| `UseClosedLoopSign` | $\mathrm{sgn}(e)$, the sign of the position error | Plain position requests (`PositionVoltage`, `PositionTorqueCurrentFOC`) with no velocity. |
+
+**The setting only affects position control.** Velocity modes (`VelocityVoltage`, `VelocityTorqueCurrentFOC`) always use the sign of the velocity reference.
+
+**Why it matters.** A plain position request has $v_{\text{ref}} = 0$. With the default `UseVelocitySign`, that makes $\sigma_{\text{kS}} = 0$, so **kS is never applied**. kP alone then has to overcome static friction, which only happens once the error is large enough, leaving a small steady-state offset. `UseClosedLoopSign` applies kS in the direction of the error and removes the offset.
+
+**The cost is chatter.** Near the setpoint, noise pushes the error back and forth across zero, and kS flips sign every loop. That is audible and heats the motor. Keep kS just large enough to break stiction when you use `UseClosedLoopSign`.
+
+**Which setting for which request:**
+
+| Request | Setting |
+|:---|:---|
+| `VelocityVoltage`, `VelocityTorqueCurrentFOC` | Ignored. Always $\mathrm{sgn}(v_{\text{ref}})$. |
+| Any `MotionMagic*` position request | `UseVelocitySign` (default). The profile supplies $v_{\text{ref}}$, so kS acts during motion and drops to zero once the mechanism stops. |
+| `PositionVoltage` / `PositionTorqueCurrentFOC`, no `Velocity` argument | `UseClosedLoopSign`. Otherwise kS never helps with small corrections. |
+| `PositionVoltage` / `PositionTorqueCurrentFOC` **with** a `Velocity` argument (your own motion profile) | `UseVelocitySign` (default), since you are supplying a real velocity reference. |
+
+The mechanism procedures below refer back to this table.
+
+## 1.3 Feedforward First
+
+> **Feedforwards do the heavy lifting. PID corrects what's left.**
+
+If kS, kV, kA, and kG are right, kP only has to clean up disturbances and modeling error. Raising kP to make up for missing feedforward gets you oscillation, overshoot, and a mechanism that misbehaves whenever something changes (a stretched chain, a fresh battery, a heavier game piece). Put the physics in the feedforward, then let feedback handle what's left.
+
+## 1.4 Profiled vs. Simple Control
+
+Position control comes in three flavors:
+
+**Simple PID** — `PositionVoltage` / `PositionTorqueCurrentFOC`. The setpoint is a step, and the controller drives the error to zero as fast as the gains allow. Nothing shapes the path in between, so a large step asks for near-infinite acceleration: current spikes, mechanical stress, and overshoot.
+
+**Motion Magic (trapezoidal)** — `MotionMagicVoltage` / `MotionMagicTorqueCurrentFOC`. Builds a trapezoidal velocity profile from a configured cruise velocity ($v_{\max}$), acceleration ($a_{\max}$), and optional jerk ($j_{\max}$, which rounds the corners into an S-curve). The PID chases a moving target it can actually keep up with.
+
+Each loop, the profile hands the controller a position, velocity, and acceleration reference:
+
+$$
+\theta_{\text{ref}}(t), \quad \dot{\theta}_{\text{ref}}(t) = v_{\text{ref}}(t), \quad \ddot{\theta}_{\text{ref}}(t) = a_{\text{ref}}(t)
+$$
+
+With good feedforward, the mechanism follows these closely.
+
+**Motion Magic Expo** — `MotionMagicExpoVoltage` / `MotionMagicExpoTorqueCurrentFOC`. Builds an exponential profile from a model of the motor instead of from limits you pick. See [§1.4.1](/docs/controls/ctre/motion-magic-expo#141-motion-magic-expo-in-detail).
+
+**When to use which:**
+
+- **Simple PID** — short moves where the path doesn't matter, or early bring-up before the mechanism is characterized.
+- **Motion Magic (trapezoidal)** — when you need to enforce a hard limit (e.g., "this arm must never accelerate faster than X or the robot tips"), or want the same profile shape every time.
+- **Motion Magic Expo** — the default choice for arms, elevators, and turrets. The profile stays within what the motor can deliver, so it is always achievable.
+
+## 1.5 General Tuning Workflow
+
+<Procedure title="Tuning workflow">
+
+1. **Set units.** Set `SensorToMechanismRatio` in `FeedbackConfigs` so positions are in mechanism rotations (the arm, turret, or drum turns once per unit) rather than rotor rotations. Every gain below is per mechanism unit.
+2. **Set `StaticFeedforwardSign`** for the request you'll use ([§1.2.1](#121-the-staticfeedforwardsign-config)): the default `UseVelocitySign` for velocity and Motion Magic, `UseClosedLoopSign` for plain `PositionVoltage` / `PositionTorqueCurrentFOC`.
+3. **Characterize.** Get kS, kV, kA, and (for arms and elevators) kG in your output family's units. For voltage mode, SysId is the standard tool. For torque-current mode, compute kG and kA from physics and measure kS by hand ([§3.0.4](/docs/controls/ctre/torque-current#304-sysid-and-torque-current-what-actually-transfers) explains why).
+4. **Feedforward only.** Enter the feedforwards with all PID gains at zero. The mechanism should roughly follow slow setpoints.
+5. **Add kP** until disturbances are rejected well, stopping short of sustained oscillation.
+6. **Add kD** if position moves oscillate. Start around kP/100 in voltage mode and kP/30 to kP/10 in torque mode, which lacks back-EMF damping ([§3.0.3](/docs/controls/ctre/torque-current#303-feedforward-in-torque-mode)).
+7. **Add kI** only as a last resort, for steady-state error the model doesn't explain.
+8. **Tune the profile last** (cruise velocity and acceleration, or Expo_kV and Expo_kA), once PID plus feedforward handles arbitrary setpoints.
+
+</Procedure>

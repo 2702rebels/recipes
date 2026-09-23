@@ -1,0 +1,199 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+/* Geist and Geist Mono, loaded in app/layout.tsx. */
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Colors for interactive plots. Always reference these tokens, not raw palette colors, so both themes work. */
+:root {
+  --color-plot-1: var(--color-fd-primary);
+  --color-plot-2: oklch(0.65 0.17 45);
+  --color-plot-muted: var(--color-fd-muted-foreground);
+  --color-plot-danger: oklch(0.63 0.22 25 / 0.18);
+  --color-plot-zone-1: oklch(0.62 0.13 250 / 0.1);
+  --color-plot-zone-2: oklch(0.72 0.14 75 / 0.14);
+
+  /* Tuning procedure colors by output family (components/procedure.tsx). */
+  --color-procedure-voltage: oklch(0.52 0.1 190);
+  --color-procedure-torque: oklch(0.5 0.16 295);
+  --color-procedure-general: oklch(0.5 0.04 250);
+}
+
+.dark {
+  --color-plot-2: oklch(0.75 0.15 55);
+  --color-plot-danger: oklch(0.7 0.2 25 / 0.25);
+  --color-plot-zone-1: oklch(0.7 0.12 250 / 0.14);
+  --color-plot-zone-2: oklch(0.78 0.13 75 / 0.14);
+
+  --color-procedure-voltage: oklch(0.78 0.1 190);
+  --color-procedure-torque: oklch(0.76 0.13 295);
+  --color-procedure-general: oklch(0.76 0.04 250);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* Long display equations scroll instead of overflowing the page. */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.25rem;
+}
+
+/* Anything tagged with an output family picks up its color, a faint tint, and a matching border. */
+:is(.procedure, .procedure-chip, .procedure-card)[data-mode="voltage"] {
+  --color-procedure: var(--color-procedure-voltage);
+}
+
+:is(.procedure, .procedure-chip, .procedure-card)[data-mode="torque"] {
+  --color-procedure: var(--color-procedure-torque);
+}
+
+:is(.procedure, .procedure-chip, .procedure-card)[data-mode="general"] {
+  --color-procedure: var(--color-procedure-general);
+}
+
+:is(.procedure, .procedure-chip, .procedure-card)[data-mode] {
+  --color-procedure-bg: color-mix(in oklch, var(--color-procedure) 7%, transparent);
+  --color-procedure-border: color-mix(in oklch, var(--color-procedure) 32%, transparent);
+}
+
+.procedure,
+.procedure-card {
+  background: var(--color-procedure-bg);
+  border-color: var(--color-procedure-border);
+}
+
+.procedure-chip {
+  border-color: var(--color-procedure-border);
+  background: var(--color-procedure-bg);
+  color: var(--color-procedure);
+}
+
+.procedure-chip:hover,
+.procedure-card:hover {
+  background: color-mix(in oklch, var(--color-procedure) 14%, transparent);
+}
+
+/*
+ * Numbered step markers inside tuning procedure panels. The counter lives on the panel, not the list, so steps keep
+ * counting when a list is split by a display equation (markdown restarts the <ol>, and its start attribute is ignored).
+ */
+.procedure {
+  counter-reset: step;
+}
+
+.prose .procedure > ol {
+  list-style: none;
+  padding-inline-start: 0;
+}
+
+.prose .procedure > ol > li {
+  counter-increment: step;
+  position: relative;
+  padding-inline-start: 2.25rem;
+}
+
+.prose .procedure > ol > li::before {
+  content: counter(step);
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.15em;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 9999px;
+  background: var(--color-procedure);
+  color: var(--color-fd-background);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* Printing. Plain Ctrl+P prints the page without site navigation. The procedure print buttons set data-print. */
+@media print {
+  /*
+   * Always print in light mode. components/print-light-mode.tsx removes the dark class before printing. This restates
+   * the light values in case that script hasn't run. Keep it in sync with the Fumadocs neutral theme and :root above.
+   */
+  .dark {
+    color-scheme: light;
+    --color-fd-background: hsl(0, 0%, 96%);
+    --color-fd-foreground: hsl(0, 0%, 3.9%);
+    --color-fd-muted: hsl(0, 0%, 96.1%);
+    --color-fd-muted-foreground: hsl(0, 0%, 45.1%);
+    --color-fd-popover: hsl(0, 0%, 98%);
+    --color-fd-popover-foreground: hsl(0, 0%, 15.1%);
+    --color-fd-card: hsl(0, 0%, 94.7%);
+    --color-fd-card-foreground: hsl(0, 0%, 3.9%);
+    --color-fd-border: hsla(0, 0%, 80%, 50%);
+    --color-fd-primary: hsl(0, 0%, 9%);
+    --color-fd-primary-foreground: hsl(0, 0%, 98%);
+    --color-fd-secondary: hsl(0, 0%, 93.1%);
+    --color-fd-secondary-foreground: hsl(0, 0%, 9%);
+    --color-fd-accent: hsla(0, 0%, 82%, 50%);
+    --color-fd-accent-foreground: hsl(0, 0%, 9%);
+    --color-plot-2: oklch(0.65 0.17 45);
+    --color-plot-danger: oklch(0.63 0.22 25 / 0.18);
+    --color-plot-zone-1: oklch(0.62 0.13 250 / 0.1);
+    --color-plot-zone-2: oklch(0.72 0.14 75 / 0.14);
+    --color-procedure-voltage: oklch(0.52 0.1 190);
+    --color-procedure-torque: oklch(0.5 0.16 295);
+    --color-procedure-general: oklch(0.5 0.04 250);
+  }
+
+  #nd-sidebar,
+  #nd-subnav,
+  #nd-toc,
+  .procedure-no-print,
+  #nd-page > :not(h1, .prose) {
+    display: none !important;
+  }
+
+  #nd-docs-layout {
+    display: block !important;
+  }
+
+  .procedure,
+  .procedure *,
+  .procedure-chip {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .procedure,
+  .not-prose {
+    break-inside: avoid;
+  }
+
+  /* Procedure cards: keep only the panels and the heading right above each one. */
+  html[data-print] #nd-page > p,
+  html[data-print] .prose > :not(.procedure):not(:is(h2, h3):has(+ .procedure)) {
+    display: none !important;
+  }
+
+  html[data-print] .prose > :is(h2, h3):has(+ .procedure) {
+    margin-top: 0;
+    break-after: avoid;
+  }
+
+  html[data-print="all"] .procedure:not(:last-of-type) {
+    break-after: page;
+  }
+
+  html[data-print="one"] .procedure:not([data-printing]),
+  html[data-print="one"] .prose > :is(h2, h3):has(+ .procedure:not([data-printing])) {
+    display: none !important;
+  }
+}

@@ -1,0 +1,7 @@
+.next
+.source
+out
+node_modules
+pnpm-lock.yaml
+# Content is formatted by hand; prettier mangles math and tables in MDX.
+content

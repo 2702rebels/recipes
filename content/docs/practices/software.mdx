@@ -1,0 +1,24 @@
+---
+title: Software Practices
+description: Common themes that apply to robot software development.
+---
+
+Not every practice here is universal (some reflect Team 2702's own needs), but most are general enough to help any team.
+
+## Less is more
+
+Don't overcomplicate your code. Start simple, and add complexity in small steps based on what field testing tells you.
+
+Use the components provided by WPILib and the vendor libraries. Write custom code only when no suitable solution exists.
+
+Know when to draw the line: no premature optimization. Once a solution is good enough, move on to other problems, and optimize later if time allows.
+
+## Steal from the best, invent the rest
+
+Don't blindly copy-paste other teams' code. It may have bugs or behave in ways you don't expect. Use it for inspiration, but make sure you fully understand what it does and why.
+
+Write your own version after studying someone else's. It tests your understanding and helps you avoid their pitfalls.
+
+## Control modes
+
+The team has standardized on the CTRE ecosystem, using [Phoenix 6](https://v6.docs.ctr-electronics.com/en/stable/) with Pro-licensed devices. The recommended default is torque-current (FOC) control. See [CTRE Control Modes](/docs/controls/ctre) for a full guide.

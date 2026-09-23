@@ -1,0 +1,13 @@
+{
+  "title": "CTRE Control Modes",
+  "defaultOpen": true,
+  "pages": [
+    "procedures",
+    "foundation",
+    "motion-magic-expo",
+    "motor-constants",
+    "voltage",
+    "torque-current",
+    "selection"
+  ]
+}

@@ -1,0 +1,108 @@
+---
+title: Contributing
+description: How to add a recipe or training page, write math, and build interactive components.
+---
+
+The site is built with [Fumadocs](https://fumadocs.dev) on Next.js and published to GitHub Pages on every push to `main`. Pages are MDX: Markdown that can also contain React components.
+
+## Run it locally
+
+You need Node 24 or newer and [pnpm](https://pnpm.io).
+
+```bash
+pnpm install
+pnpm dev        # http://localhost:3000, reloads as you edit
+pnpm lint       # eslint + type-check
+pnpm build      # static site in out/
+```
+
+## Add a page
+
+1. Create an `.mdx` file under `content/docs/`. Folders become sidebar groups, and the file path becomes the URL: `content/docs/training/hunt-woozle.mdx` is served at `/docs/training/hunt-woozle`.
+2. Start it with frontmatter:
+
+   ```mdx
+   ---
+   title: How to hunt a Woozle
+   description: A practical guide on hunting and nearly catching a Woozle or... two.
+   ---
+   ```
+
+3. Add the page to the folder's `meta.json` so it appears where you want it in the sidebar. Pages not listed there are appended at the end.
+
+Use `##` for top-level sections. The page title is already the `#` heading. Link to other pages with absolute paths such as `/docs/controls/ctre/voltage#23-arm-position`.
+
+## Callouts, cards, and tabs
+
+Fumadocs components are available in every page without an import:
+
+```mdx
+<Callout type="warn" title="Check the zero first">
+  A wrong encoder zero skews kG in either direction.
+</Callout>
+
+<Cards>
+  <Card title="Voltage Control" href="/docs/controls/ctre/voltage" description="Tuning in Volts." />
+</Cards>
+```
+
+## Tuning procedures
+
+Wrap the body of every tuning procedure in `<Procedure>`, and keep its heading outside so links to it keep working:
+
+```mdx
+### 2.3.5 Tuning Procedure
+
+<Procedure mechanism="Arm" mode="voltage">
+
+1. **Set the zero.** ...
+2. **Set `StaticFeedforwardSign`.** ...
+
+</Procedure>
+```
+
+`mode` is `voltage` (teal panel) or `torque` (violet panel). Leave it out for procedures that apply to both. Leave a blank line after the opening tag and before the closing one, or the Markdown inside won't render. Steps keep counting across a display equation, so a list interrupted by `$$...$$` doesn't restart at 1. Keep interactive widgets outside the panel.
+
+Mechanism procedures are also listed in `lib/procedures.ts`, which builds the [Tuning Procedures](/docs/controls/ctre/procedures) index and the jump links under each mechanism heading (`<ProcedureLinks mechanism="Arm" mode="voltage" />`). Update it when you add or rename a procedure heading. Every panel gets a **Print** button automatically, and `<PrintProcedures />` adds a button that prints every procedure on the page.
+
+## Math
+
+Write LaTeX between `$...$` for inline math and `$$...$$` on their own lines for display math:
+
+```mdx
+Torque is $\tau = k_t \cdot I$, so:
+
+$$
+\tau = \frac{k_t}{R}\,(V - k_e \cdot \omega)
+$$
+```
+
+Use plain LaTeX (`\,`, `\_`). The doubled backslashes needed for GitHub's Markdown renderer are not needed here.
+
+<Callout type="warn" title="MDX gotchas">
+  Outside code and math, `<` starts a component and `{` starts a JavaScript expression. Write "less than" or use
+  `&lt;`, and keep braces inside math or code.
+</Callout>
+
+## Interactive components
+
+Interactive widgets live in `components/interactive/`. The current set:
+
+| Component | Used on | What it teaches |
+|:---|:---|:---|
+| `ExpoExplorer` | [Motion Magic Expo](/docs/controls/ctre/motion-magic-expo) | How Expo_kV and Expo_kA shape the profile, and where a trapezoid outruns the motor |
+| `MotorCurves` | [Motor Constants](/docs/controls/ctre/motor-constants), [Torque-Current](/docs/controls/ctre/torque-current#314-torque-vs-voltage-for-flywheels) | How back-EMF and the stator current limit set the available current at each speed, and the supply current it draws |
+| `GravityCalculator` | [Voltage](/docs/controls/ctre/voltage#233-calculating-kg-from-first-principles), [Torque-Current](/docs/controls/ctre/torque-current#342-first-principles-gains) | kG and kA from arm or elevator geometry, in Volts and Amps |
+| `BracketingSimulator` | [Torque-Current](/docs/controls/ctre/torque-current#333-tuning-procedure) | Finding kG and kS with the bracketing test |
+| `TuningSandbox` | [Torque-Current](/docs/controls/ctre/torque-current#torque-mode-has-no-built-in-damping) | Why torque mode needs kD, and where kD meets the latency limit |
+
+To add a new one:
+
+1. Create `components/interactive/my-widget.tsx`, starting with `"use client"`.
+2. Build it from the shared parts in `controls.tsx` (`Widget`, `Slider`, `Segmented`, `Readout`) and `plot.tsx` (`LinePlot`), so every widget looks the same.
+3. Take motor numbers from `lib/motors.ts` instead of repeating them. It holds the Kraken constants used across the guide.
+4. Put any simulation in a pure function under `lib/` (see `lib/turret-sim.ts`), separate from the React code, so it can be checked on its own.
+5. Use theme colors only: `fd-*` Tailwind tokens for UI, and `var(--color-plot-*)` (defined in `app/global.css`) for plot lines, so light and dark mode both work.
+6. Register it in `components/mdx.tsx`, then use it in any page as `<MyWidget />`.
+
+Keep each widget focused on one idea, give it defaults that match an example in the text, and say what the model leaves out (friction, current limits, and so on).

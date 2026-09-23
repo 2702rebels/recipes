@@ -1,0 +1,117 @@
+---
+title: Motor Constants
+description: Kraken X60 and X44 specifications and the derived constants used in feedforward calculations.
+---
+
+## 1.6 Motor Constants Reference
+
+The first-principles calculations in this document, especially for torque-current mode in [§3](/docs/controls/ctre/torque-current#3-torque-current-foc-control), need motor constants. This section collects the published values for both Kraken motors in both commutation modes.
+
+**Commutation changes the constants.** The same motor behaves differently depending on how it is commutated:
+
+- **Trapezoidal** drives two of the three phases at a time. Voltage and duty-cycle requests use it when the device is not Pro-licensed or when the request has `EnableFOC = false`.
+- **FOC** drives all three phases continuously with sinusoidal current. All `*TorqueCurrentFOC` requests use it, and so do voltage and duty-cycle requests on a Pro-licensed device with `EnableFOC = true` (the request default).
+
+FOC raises peak power. CTRE quotes about 15%, and the WCP figures below show +27% for the X60 and +16% for the X44. Most of the stall-torque gain (X60: 7.09 → 9.37 N·m) comes from a higher stall current at essentially the same $k_t$, not from more torque per amp. FOC free speed is slightly lower.
+
+**Which column to use:**
+- Voltage or duty-cycle requests, Pro-licensed, `EnableFOC = true` → **FOC**.
+- Voltage or duty-cycle requests without Pro, or with `EnableFOC = false` → **Trapezoidal**.
+- Any `*TorqueCurrentFOC` request → **FOC**.
+
+### 1.6.1 Published Nominal Specifications
+
+| Parameter | Kraken X60 (Trap) | Kraken X60 (FOC) | Kraken X44 (Trap) | Kraken X44 (FOC) |
+|:---|---:|---:|---:|---:|
+| Free Speed @ 12 V | 6000 RPM | 5800 RPM | 7758 RPM | 7368 RPM |
+| Free Speed @ 12 V (rad/s) | 628.3 | 607.4 | 812.5 | 771.6 |
+| Free Current | 2 A | 2 A | 3 A | 3 A |
+| Stall Torque | 7.09 N·m | 9.37 N·m | 4.11 N·m | 5.01 N·m |
+| Stall Current | 366 A | 483 A | 279 A | 329 A |
+| Peak Power | 1108 W | 1405 W | 835 W | 966 W |
+| Max Efficiency | 87% @ 30 A | 85.4% @ 37 A | 81% | 81% |
+
+Sources: WestCoast Products [Kraken X60](https://docs.wcproducts.com/welcome/electronics/kraken-x60/kraken-x60-motor/overview-and-features/motor-performance) and [Kraken X44](https://docs.wcproducts.com/welcome/electronics/kraken-x44/kraken-x44-motor/overview-and-features/motor-performance) documentation.
+
+### 1.6.2 Derived Electromechanical Constants
+
+These are the values the feedforward calculations use. They come from the specs above, with $V_{\text{nom}} = 12$ V:
+
+| Constant | Symbol | Kraken X60 (Trap) | Kraken X60 (FOC) | Kraken X44 (Trap) | Kraken X44 (FOC) |
+|:---|:---|---:|---:|---:|---:|
+| Torque constant | $k_t$ (N·m/A) | 0.0194 | 0.0194 | 0.0147 | 0.0152 |
+| Back-EMF constant | $k_e$ (V·s/rad) | 0.0191 | 0.0198 | 0.0148 | 0.0156 |
+| Velocity constant | $K_v$ (RPM/V) | 500.0 | 483.3 | 646.5 | 614.0 |
+| Effective resistance | $R$ ($\Omega$) | 0.0328 | 0.0248 | 0.0430 | 0.0365 |
+
+**$R$ is an effective model value, not the physical winding resistance.** It is whatever makes $V = R \cdot I$ match the published stall point, which is why the same motor shows a different $R$ under each commutation. Use the column that matches your commutation.
+
+**How each constant is derived.** Watch the units: most confusion with motor data comes from mixing rad/s, rotation/s, and RPM.
+
+$$
+k_t = \frac{\tau_{\text{stall}}}{I_{\text{stall}}} \quad \text{[N·m/A]}
+$$
+
+$$
+k_e = \frac{V_{\text{nom}}}{\omega_{\text{free}}} \quad \text{[V·s/rad, with $\omega_{\text{free}}$ in rad/s]}
+$$
+
+$$
+K_v = \frac{\omega_{\text{free, RPM}}}{V_{\text{nom}}} \quad \text{[RPM/V, with $\omega_{\text{free, RPM}}$ in RPM]}
+$$
+
+$$
+R = \frac{V_{\text{nom}}}{I_{\text{stall}}} \quad \text{[$\Omega$]}
+$$
+
+$K_v$ (the hobby-motor "Kv rating", in RPM/V) and $k_e$ (SI back-EMF constant, V·s/rad) are reciprocals up to a unit conversion: $k_e = 60 / (2\pi \cdot K_v)$.
+
+In SI units, $k_t$ (N·m/A) and $k_e$ (V·s/rad) are equal for an ideal motor and close in practice. Friction and iron losses account for the gap. Use $k_t$ for torque and current, $k_e$ for back-EMF and voltage.
+
+### 1.6.3 Quick-Reference Calculation Examples
+
+**Holding current for an arm at horizontal** (from [§3.3.2](/docs/controls/ctre/torque-current#332-first-principles-kg-in-torque-mode)):
+
+$$
+I_{\text{hold}} = \frac{m \cdot g \cdot L_{\text{cg}}}{G \cdot k_t}
+$$
+
+For a 5 kg arm with 0.4 m CG distance, 100:1 ratio, on a Kraken X60 (FOC, $k_t = 0.0194$):
+
+$$
+I_{\text{hold}} = \frac{5 \cdot 9.81 \cdot 0.4}{100 \cdot 0.0194} = 10.1 \text{ A}
+$$
+
+On a Kraken X44 (FOC, $k_t = 0.0152$), the same arm would need:
+
+$$
+I_{\text{hold}} = \frac{5 \cdot 9.81 \cdot 0.4}{100 \cdot 0.0152} = 12.9 \text{ A}
+$$
+
+The X44 needs ~28% more current for the same torque, which is worth knowing when choosing a gear ratio.
+
+**Voltage-mode kV** (V/(rotation/s) at the *motor rotor*):
+
+$$
+k_V^{\text{rotor}} = \frac{V_{\text{nom}}}{\omega_{\text{free}} / (2\pi)} = \frac{2\pi \cdot V_{\text{nom}}}{\omega_{\text{free}}}
+$$
+
+For a Kraken X60: $k_V^{\text{rotor}} = (2\pi \cdot 12) / 628.3 = 0.120$ V/(rotation/s) with trapezoidal commutation, or $(2\pi \cdot 12) / 607.4 = 0.124$ with FOC. These are **no-friction** values. SysId will measure somewhat higher because of drag and gear-train friction (typically 5–15%). Use them to sanity-check SysId results.
+
+**No-load top speed of a geared mechanism** (rotations/sec at the output):
+
+$$
+\omega_{\text{out, no-load}} = \frac{V_{\text{supply}}}{k_V^{\text{rotor}} \cdot G}
+$$
+
+For the 50:1 Kraken X60 turret from [§1.4.1](/docs/controls/ctre/motion-magic-expo#141-motion-magic-expo-in-detail) (FOC, 12 V): $\omega_{\text{out}} = 12 / (0.124 \cdot 50) \approx 1.93$ rps ≈ 700°/s, the same top speed Expo computed there. Load and friction make the real number somewhat lower.
+
+**See it for yourself.** The chart below plots the current each motor can actually draw at every speed. Back-EMF uses up more of the supply as speed rises, so the available current falls to zero at free speed. The stator current limit caps it at low speed. The chart also shows how much battery (supply) current that output draws, which is much less at low speed.
+
+<MotorCurves />
+
+### 1.6.4 Caveats
+
+- **Motors vary.** Published values are nominal. Individual motors can differ by about ±5% on $k_t$ and ±10% on $R$. SysId measures *your* motor, so prefer it when accuracy matters.
+- **Temperature matters.** Copper resistance rises about 0.4%/°C, so a motor at 80 °C has roughly 25% more $R$ than at 20 °C. That reduces torque per volt: voltage-mode kS, kA, and kG, and stall torque, all shift as the motor heats. (kV comes from back-EMF and barely changes.) Torque-current mode is largely unaffected, because the current loop compensates for $R$. Stator current limits keep heating in check.
+- **Specs get updated.** These values reflect WCP/CTRE data at the time of writing. For the latest numbers, especially after firmware changes that affect FOC, check CTRE's [Motor Testing Lab](https://motors.ctr-electronics.com).

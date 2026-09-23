@@ -1,0 +1,57 @@
+---
+title: CTRE Control Modes
+description: A practical guide to closed-loop tuning of Kraken X60 and X44 motors on Phoenix 6, covering voltage and torque-current control for the five most common FRC mechanisms.
+---
+
+The team uses the CTRE ecosystem with [Phoenix 6](https://v6.docs.ctr-electronics.com/en/stable/) and Pro-licensed devices. Our default is torque-current (FOC) control. This guide explains why, and how to tune every common mechanism in either mode.
+
+<Callout title="New to closed-loop tuning?">
+  Read [Foundations](/docs/controls/ctre/foundation) first. Every mechanism page builds on the gain model,
+  `StaticFeedforwardSign`, and the tuning workflow described there.
+</Callout>
+
+## How this guide is organized
+
+<Cards>
+  <Card
+    title="Tuning Procedures"
+    href="/docs/controls/ctre/procedures"
+    description="Every step-by-step procedure, by mechanism and output family. Start here if you just need to tune something."
+  />
+  <Card
+    title="Foundations"
+    href="/docs/controls/ctre/foundation"
+    description="Output families, gain slots, feedforward first, profiled vs. simple control, and the tuning workflow."
+  />
+  <Card
+    title="Motion Magic Expo"
+    href="/docs/controls/ctre/motion-magic-expo"
+    description="How the exponential profile comes from the motor model, with an interactive explorer."
+  />
+  <Card
+    title="Motor Constants"
+    href="/docs/controls/ctre/motor-constants"
+    description="Kraken X60 / X44 specifications and the constants behind every feedforward calculation."
+  />
+  <Card
+    title="Voltage Control"
+    href="/docs/controls/ctre/voltage"
+    description="Flywheel, turret, arm, elevator, and linear deployment tuning in Volts."
+  />
+  <Card
+    title="Torque-Current Control"
+    href="/docs/controls/ctre/torque-current"
+    description="The same mechanisms tuned in Amps with TorqueCurrentFOC requests."
+  />
+  <Card
+    title="Choosing a Control Mode"
+    href="/docs/controls/ctre/selection"
+    description="Voltage or torque-current? Recommendations per mechanism and migration pitfalls."
+  />
+</Cards>
+
+<Callout type="warn">
+  Based on the Phoenix 6 API as of 2026, including `GravityArmPositionOffset` and built-in gain scheduling. Parameter
+  names and config locations occasionally change between releases, so check against the current CTRE documentation
+  and API reference.
+</Callout>

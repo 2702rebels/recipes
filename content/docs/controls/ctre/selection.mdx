@@ -1,0 +1,79 @@
+---
+title: Choosing a Control Mode
+description: When to use voltage and when to use torque-current, mechanism by mechanism.
+---
+
+This section brings together how to choose a control family for each mechanism: first the short answer, then the reasoning.
+
+## 4.1 Quick Recommendations
+
+**If you have Phoenix Pro,** torque-current control is a good default for most mechanisms. The loop behaves the same at every speed because back-EMF is taken out of it, output current is capped explicitly, and force can be controlled directly. The table gives the torque-current choice for each mechanism and when voltage mode is still reasonable, or better.
+
+| Mechanism | Recommended Default | Voltage is Acceptable / Preferred When... |
+|:---|:---|:---|
+| Flywheel | FOC (`VelocityTorqueCurrentFOC`) | Slow rollers (intakes, indexers) where speed-dependence doesn't matter, or when SysId's convenience is worth more than the small performance gain. |
+| Turret | FOC (`MotionMagicExpoTorqueCurrentFOC`) | Turrets that only point at a few preset angles, or teams whose tools work in volts (SysId gains entered straight into the slot). |
+| Arm | FOC (`MotionMagicExpoTorqueCurrentFOC`) | Simple single-joint arms where SysId plus voltage mode is good enough and the team knows voltage mode well. |
+| Elevator | FOC (`MotionMagicExpoTorqueCurrentFOC`) | Light, low-stakes lifts (e.g., a small secondary stage) that are rigid, settle quickly, and tune fast with SysId. |
+| Linear Deployment | FOC (`MotionMagicExpoTorqueCurrentFOC` to move, `TorqueCurrentFOC` to hold with force) | Position-only deployments with short travel (under ~4 inches or ~30°). Force-control deployments (climbers, hooks) should use torque-current. |
+| Swerve | FOC for steer (`PositionTorqueCurrentFOC` or `MotionMagicExpoTorqueCurrentFOC`), either for drive | Voltage for drive is widely used and proven. Torque-current for drive enables current-based traction control but is harder to tune. |
+
+**The question for each mechanism:** does it gain from controlling torque directly, or is voltage good enough? Torque-current is worth it when any of these apply:
+
+- The mechanism runs near top speed, where speed-dependent behavior hurts in voltage mode.
+- Force or torque is what you actually want to control.
+- You want output current capped explicitly, independent of the gains.
+- The mechanism has high inertia and you want predictable acceleration.
+
+Voltage is the better choice when SysId, WPILib's feedforward classes, or the team's experience make it the easier path to a result that is already good enough.
+
+## 4.2 Detailed Selection Criteria
+
+### Pick Torque-Current FOC When (the default with Phoenix Pro):
+
+- **You have Phoenix Pro.** Torque-current is the more capable tool. Without a specific reason to use voltage, start there.
+- **Force or torque is what you want to control.** Climbers, force-controlled grippers, and traction-controlled drives are torque-mode jobs by nature.
+- **You want the loop to behave the same at every speed.** In voltage mode, part of every correction goes to fighting back-EMF, so the loop feels different at 10% and 90% of top speed. Torque mode commands current directly, so a given error gives the same torque at any speed, as long as there is voltage headroom ([§3.0.1](/docs/controls/ctre/torque-current#301-why-torque-control-is-different)).
+- **You want predictable acceleration.** Below the voltage limit, acceleration is simply $G k_t I / J$ (with $J$ the mechanism inertia), whatever the speed.
+- **You want current limiting to act like a slip clutch.** Past `PeakForwardTorqueCurrent`, torque-current requests just clip the torque. That is gentle on mechanisms that sometimes jam (intakes, climbers catching the chain). Voltage mode gets similar protection from the stator limit. Torque mode simply makes the cap explicit, in the same units as the request.
+- **Several motors should share the load evenly.** A `Follower` copies the leader's output. With a voltage leader, followers match its duty cycle, and small differences in resistance, temperature, or preload then give unequal currents. With a torque-current leader, followers copy the current, so every motor makes the same torque. There is no separate setting for this. It follows from the leader's output family.
+
+### Pick Voltage When:
+
+- **You don't have Phoenix Pro.** For many teams this settles it. Voltage control on Phoenix 6 is good, and championship-level results are achievable with it.
+- **The mechanism is simple and SysId works.** For a basic single-joint arm, a hood, or a wrist, voltage mode plus SysId is a proven workflow that tunes quickly and gives good results. Torque-current's small gains may not be worth characterizing by hand.
+- **You want to use WPILib's feedforward classes.** `SimpleMotorFeedforward`, `ArmFeedforward`, and `ElevatorFeedforward` work in volts, and their gains map directly onto voltage-mode slot gains. There are no equivalent classes for current, so with torque-current you calculate feedforwards yourself.
+- **Intuition matters more than peak performance.** Most FRC teams think about motor effort in volts ("the arm needs about 4 V to hold horizontal"). That makes voltage mode easier to debug, to hand over between students, and to reason about under competition pressure.
+- **The mechanism rarely runs near top speed.** Then back-EMF barely affects the loop, and torque mode has little to fix.
+- **The mechanism has short travel.** A 4-inch climber deployment is almost entirely acceleration and deceleration, so torque mode's better behavior at speed never shows up.
+
+### Don't Switch an Already-Tuned Mechanism When:
+
+- **It already works well in voltage mode.** Switching means re-tuning from scratch.
+- **You're short on time.** Torque mode means re-deriving every gain in Amps, largely by hand, and re-testing disturbance behavior. Mid-season is not the time.
+- **The team knows voltage mode.** Mentors' and students' sense of "what kV does" is in Volts. Relearning it all in Amps may cost more than the performance is worth.
+
+## 4.3 Mixed-Mode Strategies
+
+You don't have to choose one family for the whole robot. Choose per mechanism. With Phoenix Pro, a typical robot might use:
+
+- **Swerve drive motors:** voltage or torque-current. Voltage is widely used and works well. Torque-current enables current-based traction control but is harder to tune.
+- **Swerve steering:** torque-current. The constant small corrections benefit from its smoothness and its hard current cap.
+- **Shooter flywheels:** torque-current. The clearest win: consistent recovery at high speed.
+- **Turret:** torque-current for continuous vision tracking. Voltage is enough if it only points at a few preset angles.
+- **Arm:** torque-current for the main scoring arm. Voltage is fine for simple wrists and hoods.
+- **Elevator:** torque-current for the main lift. Voltage is fine for low-stakes secondary stages.
+- **Climber:** torque-current for the pulling phase (force control). The positioning phase can use either, but staying in torque-current keeps the state machine simple.
+- **Intakes / indexers:** torque-current if you care about not stalling on game pieces. Voltage is enough if it just has to "spin until full". The current cap acting as a clutch is useful here.
+
+Phoenix 6 supports any mix. The only rule is that each request uses a single family.
+
+## 4.4 Common Migration Pitfalls
+
+When moving a mechanism from voltage to torque-current:
+
+1. **Every gain must be re-derived.** kP, kI, kD, kS, kV, kA, and kG all change units. SysId still works in torque mode, but its kV is nearly meaningless there ([§3.0.4](/docs/controls/ctre/torque-current#304-sysid-and-torque-current-what-actually-transfers)). The reliable path is to compute kG and kA from physics (motor $k_t$, gear ratio, mass, geometry) and measure kS with a slow current ramp. Plan on a solid session per mechanism.
+2. **Set the torque-current limits.** Stator (120 A) and supply (70 A) limits are on by default and apply in both families, but torque requests are also capped by `TorqueCurrentConfigs.PeakForwardTorqueCurrent` / `PeakReverseTorqueCurrent`, which default to ±800 A. Set them to what the mechanism should really be allowed, especially on anything that can stall.
+3. **Motion Magic Expo configs stay in Volts.** `MotionMagicExpo_kV` and `MotionMagicExpo_kA` do not change units with the request family, unlike slot kV/kA ([§1.4.1](/docs/controls/ctre/motion-magic-expo#141-motion-magic-expo-in-detail)).
+4. **WPILib's feedforward classes don't apply.** `ArmFeedforward`, `ElevatorFeedforward`, and `SimpleMotorFeedforward` work in volts. Compute current feedforwards from physics yourself, using the formulas on the [torque-current page](/docs/controls/ctre/torque-current).
+5. **Logging changes.** Plot `TorqueCurrent` (the quantity being controlled) where you used to plot `MotorVoltage`. Keep `ClosedLoopReference` and `ClosedLoopError`, which are just as useful.

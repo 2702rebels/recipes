@@ -1,0 +1,504 @@
+---
+title: Torque-Current Control
+description: Tuning with TorqueCurrentFOC requests (Phoenix Pro), and what torque control does and doesn't change.
+---
+
+Torque-current requests command the torque-producing stator current ($I_q$) directly, using Field Oriented Control. They need Phoenix Pro on the Kraken X60 or X44.
+
+**About the name.** This section and [§4](/docs/controls/ctre/selection#4-voltage-vs-torque-selection-guide) say "FOC" to mean torque-current control, as most teams do. Strictly, FOC is a way of commutating the motor, and Phoenix Pro also uses it for voltage and duty-cycle requests when `EnableFOC = true` (see [§1.6](/docs/controls/ctre/motor-constants#16-motor-constants-reference)). What sets this section apart is the *output family*: Amps instead of Volts.
+
+
+<PrintProcedures />
+
+## 3.0.1 Why Torque Control is Different
+
+In voltage mode, the torque you get for a given voltage depends on speed, because back-EMF subtracts from it:
+
+$$
+\tau \propto I = \frac{V_{\text{applied}} - \omega \cdot k_e}{R}
+$$
+
+So the same kP produces less force at high speed than at low speed. (Battery sag is not the issue: voltage requests already compensate for it.) Torque-current mode commands the current directly:
+
+$$
+\tau = k_t \cdot I_q
+$$
+
+A fast inner current loop in the firmware produces the requested current, so from the tuner's point of view you are commanding motor torque directly, and it no longer depends on speed.
+
+**It cannot create voltage the battery doesn't have.** To push a current, the drive still has to overcome back-EMF: the most current it can get is $I_{\max} = (V_{\text{supply}} - k_e \omega)/R$. Near top speed, torque mode runs out of authority exactly like voltage mode. What changes is how error becomes output, not how much output is available.
+
+## 3.0.2 Tuning Implications
+
+With Amps as the output, every gain changes units. A rough conversion for kP:
+
+$$
+I = \frac{V}{R} \quad \Rightarrow \quad k_P^{\text{torque}} \approx \frac{k_P^{\text{voltage}}}{R}
+$$
+
+A voltage-mode kP of 30 V/rotation on a Kraken X60 (FOC, $R = 0.0248$ Ω from [§1.6.2](/docs/controls/ctre/motor-constants#162-derived-electromechanical-constants)) becomes about $30/0.0248 \approx 1210$ A/rotation. Treat this as a ballpark only. Modest errors will already hit the current limit, and once the output is clipped the loop stops behaving linearly. Tune from a lower starting point (see the procedures below).
+
+## 3.0.3 Feedforward in Torque Mode
+
+**Which feedforwards act depends on the request, not only the mechanism.** A term only contributes when the request supplies the reference it multiplies:
+
+| Term | Active in `VelocityTorqueCurrentFOC` | Active in `PositionTorqueCurrentFOC` (no velocity arg) | Active in `MotionMagic*TorqueCurrentFOC` |
+|:---|:---|:---|:---|
+| kS | Yes | Yes (via `StaticFeedforwardSign` config — see [§1.2.1](/docs/controls/ctre/foundation#121-the-staticfeedforwardsign-config)) | Yes |
+| kV | Yes — represents drag | No (no $v_{\text{ref}}$) | Yes |
+| kA | Yes (if profiled or with explicit acceleration) | No (no $a_{\text{ref}}$) | Yes |
+| kG | Always applied (set kG = 0 for a flywheel) | Yes | Yes |
+
+(Rows marked "No" become "Yes" if you pass a `Velocity` or `Acceleration` to the request yourself.)
+
+In particular, **kA does nothing without a profile.** On plain `PositionTorqueCurrentFOC` there is no commanded acceleration to multiply, so don't spend time on kA until you switch to Motion Magic.
+
+**What each term means in torque mode:**
+
+- **kS** (Amps): current to overcome stiction. Found by slowly raising current until the mechanism moves.
+- **kV** on a **flywheel**: current to overcome drag and windage. It matters here: CTRE's flywheel example ends at kV ≈ 0.15 A/rps.
+- **kV** on a **position mechanism** (turret, arm, elevator): 0 without a profile, small with one (gear-train drag).
+- **kA** (Amps per mechanism rotation/s²): inertia. Two conversions are easy to miss: the rotor accelerates $G$ times faster than the mechanism, and a $2\pi$ converts rotations to radians. With the slot in mechanism units (via `SensorToMechanismRatio`):
+
+$$
+  k_A = \frac{2\pi \cdot G \cdot J_{\text{rotor}}}{k_t} = \frac{2\pi \cdot J_{\text{mech}}}{G \cdot k_t}
+$$
+
+  where $J_{\text{rotor}} = J_{\text{mech}} / G^2$ is the mechanism inertia reflected to the rotor. Check that whatever you compute comes out in A/(rotation/s²).
+- **kG** (Amps): current to hold against gravity. $k_G = m g L_{\text{cg}} / (G \cdot k_t)$ for an arm at horizontal, and $k_G = m g r / (G \cdot k_t)$ for an elevator with drum radius $r$.
+
+All torque-current requests use the same slot fields as voltage mode. The values are simply read as Amps.
+
+### Torque mode has no built-in damping
+
+In voltage mode, back-EMF opposes motion in proportion to speed. It acts as free damping, which is why a voltage-mode position loop often works with kP alone.
+
+**Torque mode removes that damping.** The current loop delivers the commanded torque whatever the speed, so nothing resists motion except friction. As a result:
+
+- **kD is effectively required** for torque-mode position control, even on mechanisms that were stable with kP alone in voltage mode.
+- **Tune kP and kD together,** stepping each in turn, rather than finishing kP and then adding kD.
+- **Expect a much larger kD/kP ratio:** roughly 1/30 to 1/10, versus about 1/100 in voltage mode. CTRE's examples: 60/1650 ≈ 1/28 (turret), 300/3700 ≈ 1/12 (arm), 2000/16000 = 1/8 (profiled high-inertia mechanism).
+
+**See the difference.** The sandbox simulates a 20:1 turret. Compare the voltage and torque presets with kP only, then add kD. Raising kD far past CTRE's value makes the loop chatter, which is the latency limit described in the turret procedure ([§3.2.3](#323-tuning-procedure)).
+
+<TuningSandbox />
+
+
+## 3.0.4 SysId and Torque-Current: What Actually Transfers
+
+**The model is not the obstacle.** SysId fits a first-order linear system of the form
+
+$$
+u = k_S \cdot \mathrm{sgn}(\dot{x}) + k_V \cdot \dot{x} + k_A \cdot \ddot{x} \quad (+\, k_G \text{ term for arms/elevators})
+$$
+
+In torque-current mode, the mechanism behaves as
+
+$$
+\tau = \tau_{\text{static}} + b \cdot \dot{x} + J \cdot \ddot{x} \quad (+\, \tau_{\text{gravity}})
+$$
+
+which has the *same form*, with $u$ in Amps instead of Volts. So the fitting math still works: drive the SysId routine with a torque-current request (the routine's "volts" are then really Amps) and the resulting kS/kV/kA/kG come out in Amps.
+
+**What gets awkward:**
+
+- **kV is near zero and poorly determined.** In voltage mode, kV is mostly back-EMF and is the largest, best-measured term in the fit. In torque mode the current loop has already removed back-EMF, leaving only mechanical drag. On a low-friction position mechanism that is close to the noise floor, and the fit may return a small negative or erratic value. Treat a torque-mode kV from SysId as zero unless it's a flywheel.
+- **kA absorbs the error.** Because kV is poorly determined, fitting error tends to end up in kA. Compare SysId's kA with the physics value $2\pi \cdot J_{\text{mech}} / (G \cdot k_t)$ from [§3.0.3](#303-feedforward-in-torque-mode) before using it.
+- **The tools say Volts.** SysId labels its inputs and gains in volts no matter what you logged. Remember that the numbers are Amps.
+
+**This is why CTRE recommends tuning torque-current mechanisms by hand** (their *Manually Tune your PID Loops* guide), which is often faster than a SysId run for a single mechanism. Each torque-mode section below gives:
+
+1. A physics calculation for kG (and kA for high-inertia mechanisms) from motor constants and mechanism geometry.
+2. A way to measure kS with a slow current ramp.
+3. A way to set kP and kD by watching the response.
+
+The approaches combine well: compute kG and kA from physics, measure kS, and use SysId, if at all, as a check on kA. In torque mode the physics maps cleanly onto known quantities ($k_t$, mass, gear ratio, geometry), so the hand calculation is usually the more trustworthy of the two.
+
+## 3.0.5 Profiled Tuning (Motion Magic with TorqueCurrentFOC)
+
+With a torque-current Motion Magic request (`MotionMagicTorqueCurrentFOC`, `MotionMagicExpoTorqueCurrentFOC`, `MotionMagicVelocityTorqueCurrentFOC`), the profile supplies $v_{\text{ref}}$ and $a_{\text{ref}}$ every loop, so kV and kA do real work:
+
+$$
+I_q(t) = k_S \cdot \mathrm{sgn}(v_{\text{ref}}) + k_G \cdot g(\theta) + k_V \cdot v_{\text{ref}}(t) + k_A \cdot a_{\text{ref}}(t) + k_P \cdot e + k_D \cdot \dot{e}
+$$
+
+When this is tuned well, feedforward does most of the work: kS handles stiction, kG gravity, kA the profile's acceleration, and kV drag at speed. PID only corrects modeling error and disturbances. From CTRE's guide:
+
+> *"the introduction of a profile means much of the response can be calculated in advance with feed-forwards. This results in much of the work being done due to feed forward, with the feedback gains being used to account for any error in the system."*
+
+### Recommended order for tuning a profiled torque-current controller
+
+<Procedure mechanism="Profiled (Motion Magic)" mode="torque">
+
+Order matters: tuned out of order, terms hide each other's errors.
+
+1. **Zero all gains** (kP, kI, kD, kS, kV, kA). If gravity acts on the mechanism, first find kG and kS with the bracketing method ([§3.3.3](#333-tuning-procedure) for arms, [§3.4.4](#344-tuning-procedure) for elevators).
+
+2. **Tune kS** by raising current slowly until the mechanism moves (skip if bracketing already gave you kS). Same as without a profile.
+
+3. **Tune kA on the acceleration phase.** Run a profiled move and compare the measured velocity slope at the start with the profile's. Raise kA until they match. If you can plot acceleration (Tuner X, AdvantageScope), match measured to commanded acceleration directly.
+   - kA does most of the work in profiled torque mode. Start from the physics value $k_A = 2\pi \cdot J_{\text{mech}} / (G \cdot k_t)$ ([§3.0.3](#303-feedforward-in-torque-mode)). The tuned value usually lands within ~30% of it.
+   - CTRE's profiled example ends at kA = 65 A/(rotation/s²) for a 1:1 high-inertia mechanism.
+
+4. **Tune kV on the cruise phase.** Once acceleration matches, look at constant-velocity cruise. Raise kV until measured velocity stays on the profile throughout, without slowly falling behind or pulling ahead.
+   - Many position mechanisms have almost no drag and can keep kV = 0. Only add kV if you see drift during cruise.
+   - CTRE's example ends at kV = 0.15 A/(rotation/s). That is drag, not back-EMF, which the current loop has already removed.
+
+5. **Tune kP and kD together**, as without a profile: raise kP until it overshoots, raise kD until the overshoot stops, and repeat until you reach the limit ([§3.2.3](#323-tuning-procedure)). Because good feedforward keeps the tracking error small, the loop tolerates much higher kP and kD than it would without a profile. Gains that would be unstable on a large step are fine when the error never gets large.
+
+**Worked example from CTRE.** A 1:1 high-inertia profiled mechanism ended at kS = 1.25 A, kV = 0.15 A/(rotation/s), kA = 65 A/(rotation/s²), kP = 16000 A/rotation, kD = 2000 A/(rotation/s). Those very high kP and kD values only work because kA is doing most of the work. Without it, the tracking error would grow and the same gains would be unstable.
+
+</Procedure>
+
+## 3.1 Flywheel (Velocity)
+
+<ProcedureLinks mechanism="Flywheel" mode="torque" />
+
+Torque-current works very well for flywheels:
+
+1. **The loop behaves the same at every speed.** The current loop cancels back-EMF, so a given error produces the same corrective torque at 20 rps as at 80 rps (given enough voltage headroom, see [§3.1.4](#314-torque-vs-voltage-for-flywheels)).
+2. **Recovery is sharper.** The controller commands torque directly instead of working through the voltage/back-EMF relationship.
+3. **The recovery current is bounded.** `PeakForwardTorqueCurrent` and the stator limit cap how hard it pulls when a game piece slows the wheel. (To protect the battery from brownouts you still need the *supply* current limit.)
+
+### 3.1.1 Control Output Equation
+
+For `VelocityTorqueCurrentFOC`:
+
+$$
+I_q(t) = k_S \cdot \mathrm{sgn}(v_{\text{ref}}) + k_V \cdot v_{\text{ref}} + k_A \cdot a_{\text{ref}} + k_P \cdot (v_{\text{ref}} - v_{\text{measured}}) + k_I \int (v_{\text{ref}} - v_{\text{measured}})\,dt
+$$
+
+The output is in Amps. The inner current loop then produces that current in the motor.
+
+### 3.1.2 Parameter Effects
+
+| Gain | Effect on Output (Torque Mode) |
+|:---|:---|
+| **kS** | Current to overcome stiction. Typically 1–4 A for FRC flywheels. |
+| **kV** | Current per rps to overcome drag. Small but not zero, since air drag grows with speed. |
+| **kA** | Current per rps² of acceleration: $k_A = 2\pi \cdot J_{\text{mech}} / (G \cdot k_t)$ in mechanism units ([§3.0.3](#303-feedforward-in-torque-mode)). Supplies spin-up current ahead of time. |
+| **kP** | Disturbance rejection, and very effective here. Values are numerically larger than in voltage mode (it takes many Amps to match one Volt), and you can usually push it further before oscillation. |
+| **kI** | Steady-state error correction. Often 0. |
+
+### 3.1.3 Tuning Procedure
+
+<Procedure mechanism="Flywheel" mode="torque">
+
+CTRE's method (from their *Manually Tune your PID Loops* guide) alternates between a low and a high setpoint. kS dominates at low speed, where kV·v is small, and kV dominates at high speed, so tuning each where it dominates and alternating separates them cleanly. A small kP (not zero) during this makes it easy to see whether the flywheel reaches the setpoint, without hiding feedforward errors.
+
+1. **Set current limits.**
+   - `TorqueCurrentConfigs.PeakForwardTorqueCurrent` / `PeakReverseTorqueCurrent`: the most current a torque request can ask for. The default is 800 A, so always lower it (e.g., ±80 A for one Kraken on a flywheel).
+   - `StatorCurrentLimit` (default 120 A, on): applies on top of the peak torque current.
+   - Supply limits, to protect the battery: e.g., `SupplyCurrentLimit = 80` A, dropping to `SupplyCurrentLowerLimit = 60` A after `SupplyCurrentLowerTime = 1` s.
+
+2. **Zero all gains** (kP, kI, kD, kS, kV, kA).
+
+3. **Tune kS at a low setpoint,** about 1/10 of top speed (e.g., 10 rps on a 100 rps flywheel). Raise kS until the flywheel spins up to the setpoint without overshooting. Doubling is quick (1, 2, 4, 8 A). Narrow down once you've bracketed it.
+
+4. **Set a small kP:** `kP = 1 * RotorToSensorRatio * SensorToMechanismRatio`, which is 1 A per *rotor* rps of error in mechanism units. A 1:1 flywheel gets kP = 1, and a 20:1 mechanism gets kP = 20. It is deliberately small, just enough to show undershoot clearly while you tune kV.
+
+5. **Tune kV at a high setpoint,** about 8/10 of top speed (e.g., 80 rps). Raise kV until the flywheel reaches it. If it overshoots badly, halve kV. If it undershoots, raise it. Narrow down from there.
+
+6. **Alternate.** Back at the low setpoint it will probably overshoot now, because of the added kV. Lower kS until it lands cleanly, then return to the high setpoint and adjust kV. Stop when neither changes over two consecutive rounds, usually 2–3 rounds.
+
+7. **Raise kP for disturbance rejection.** Keep doubling it (1, 2, 4, 8, 16…) while watching time-to-setpoint and overshoot. When it oscillates or overshoots too much, go back to the last good value. CTRE's example ends at kP = 16 A/rps. Yours depends on inertia and current limit.
+
+8. **Test with real game pieces** (or another realistic disturbance) and watch the closed-loop error. Recovery too slow → room for more kP. Oscillation → back off. If normal shots hit the current limit, kP is asking for more than the limit allows, so back off.
+
+9. **kA only matters with a profiled velocity request** (`MotionMagicVelocityTorqueCurrentFOC`). If you use one to control spin-up, start from $k_A = 2\pi \cdot J_{\text{flywheel}} / (G \cdot k_t)$ ([§3.0.3](#303-feedforward-in-torque-mode)) and refine on the robot.
+
+**Worked example from CTRE.** A 1:1 flywheel with a 100 rps top speed ended at kS = 2.6 A, kV = 0.15 A/rps, kP = 16 A/rps. The kV here is air drag, not back-EMF, which the current loop has already removed.
+
+</Procedure>
+
+### 3.1.4 Torque vs. Voltage for Flywheels
+
+It's tempting to say torque mode has "full current available at any speed". It doesn't. Both modes hit the same physical ceiling:
+
+$$
+I_{\max} = \frac{V_{\text{supply}} - k_e \omega}{R}
+$$
+
+At 80 rps on a Kraken X60 (FOC), back-EMF is $0.0198 \cdot 2\pi \cdot 80 \approx 10$ V. That leaves about 2 V, or roughly 2 / 0.0248 ≈ 80 A, for either mode. Closer to free speed, both run out.
+
+Move the operating speed in the chart to see how quickly the ceiling drops as a shooter approaches free speed. It starts at 80 rps (4800 RPM) with an 80 A stator current limit.
+
+<MotorCurves initialSpeedRpm={4800} initialLimit={80} />
+
+
+What torque mode actually improves:
+
+- **Error-to-torque stays constant.** In voltage mode, the correction voltage has to fight back-EMF before it becomes current, so the same kP behaves differently at different speeds. In torque mode, a given error always commands the same current.
+- **Recovery is sharper.** In voltage mode, back-EMF acts as damping that softens every correction. Torque mode has none ([§3.0.3](#303-feedforward-in-torque-mode)), so the same error gets a stronger response.
+- **Peak current is set explicitly** with `PeakForwardTorqueCurrent`, instead of depending on kP and the size of the error.
+
+On a high-speed shooter this usually shows up as noticeably faster, more consistent recovery between shots, as long as the setpoint leaves some voltage headroom.
+
+## 3.2 Turret (Position)
+
+<ProcedureLinks mechanism="Turret" mode="torque" />
+
+Turrets gain from torque control mainly in **smoothness**: smoother slow motion and better small corrections, because the current loop removes the speed dependence that back-EMF adds. (It does nothing about friction, which kS still has to handle.)
+
+### 3.2.1 Control Output Equation
+
+For `PositionTorqueCurrentFOC`:
+
+$$
+I_q(t) = k_S \cdot \sigma_{\text{kS}} + k_P \cdot e_\theta + k_I \int e_\theta\,dt + k_D \cdot \dot{e}_\theta
+$$
+
+with $\sigma_{\text{kS}}$ set by `StaticFeedforwardSign` ([§1.2.1](/docs/controls/ctre/foundation#121-the-staticfeedforwardsign-config)). Use `UseClosedLoopSign` here so kS acts on small corrections. With the default, $\sigma_{\text{kS}} = 0$ and kS does nothing.
+
+For `MotionMagicExpoTorqueCurrentFOC`:
+
+$$
+I_q(t) = k_S \cdot \mathrm{sgn}(v_{\text{ref}}) + k_V \cdot v_{\text{ref}}(t) + k_A \cdot a_{\text{ref}}(t) + k_P \cdot e_\theta + k_I \int e_\theta\,dt + k_D \cdot \dot{e}_\theta
+$$
+
+### 3.2.2 Parameter Effects
+
+| Gain | Effect (Torque Mode) |
+|:---|:---|
+| **kS** | Current to overcome static friction. Direct-drive and low-ratio turrets need more than highly geared ones. |
+| **kV** | Current per rps, from gear-train drag only. Often ~0.5 A/rps or less. |
+| **kA** | Current per rps², proportional to inertia. Significant on heavy turrets. |
+| **kP** | Position correction. |
+| **kD** | Damping. |
+
+### 3.2.3 Tuning Procedure
+
+<Procedure mechanism="Turret" mode="torque">
+
+CTRE's method for plain position control in torque mode (from *Manually Tune your PID Loops*): tune kS to overcome friction, then raise kP and kD together until you reach the system's limit. **kV and kA do nothing here**, because there is no commanded velocity or acceleration to multiply.
+
+1. **Set soft limits, current limits, and the sensor.** Lower `PeakForwardTorqueCurrent` / `PeakReverseTorqueCurrent` from the 800 A default and set `StatorCurrentLimit`. For a turret, 40–60 A is typical.
+
+2. **Set `StaticFeedforwardSign`:** `UseClosedLoopSign` for plain `PositionTorqueCurrentFOC`, the default for Motion Magic.
+
+3. **Zero all gains.**
+
+4. **Command a small move,** e.g., 0.1 mechanism rotations. That is 36° of turret travel whatever the gear ratio (2 rotor rotations on a 20:1 turret).
+
+5. **Tune kS.** Raise kS until the turret just starts to move toward the setpoint, then back off until it just doesn't. That largest non-moving value is kS.
+
+6. **Raise kP and kD together.** With no back-EMF damping, kP alone always overshoots or oscillates, so they have to be tuned as a pair. You can try this on a simulated turret in the [tuning sandbox](#torque-mode-has-no-built-in-damping):
+   - Raise kP until it clearly overshoots. Big jumps (1, 10, 50, 100, 200…) find the range fast. Then narrow down.
+   - Raise kD until the overshoot stops (1, 10, 20, 40…).
+   - Repeat, kP then kD, until either (a) more kD makes oscillation *worse*, or (b) the turret oscillates *on its way* to the setpoint, not just at it.
+   - Either sign means you've reached the system's latency limit. Lower kD until the on-the-way oscillation stops, then lower kP until any overshoot is gone.
+
+7. **Test several move sizes:** small, medium, and large. Gains tuned on small moves often overshoot on large ones, because large errors saturate the current limit and the move becomes a step response. Lower kP until large moves behave, accepting slightly slower small moves.
+
+8. **Optional: gain scheduling.** If small and large moves both matter and one set of gains can't serve both, set `ClosedLoopGeneralConfigs.GainSchedErrorThreshold` and the slot's `GainSchedBehavior`. The firmware then switches gains automatically when $|e_\theta|$ falls inside the threshold. CTRE's example 20:1 turret ended at kS = 1.25 A, kP = 1650 A/rotation, kD = 60 A/(rotation/s), after walking kP back down (2200 → 2000 → 1800 → 1650) once larger moves started overshooting.
+
+9. **For Motion Magic Expo,** follow [§3.0.5](#305-profiled-tuning-motion-magic-with-torquecurrentfoc): kS first, then kA on the acceleration, kV on the cruise, then kP and kD as above.
+
+**A safe first kP:** $k_P = 1 \cdot \text{RotorToSensorRatio} \cdot \text{SensorToMechanismRatio}$ A per mechanism rotation, i.e., 1 A per rotor rotation of error. On a 20:1 turret that is 20 A/rotation. The tuned value will be far higher (CTRE's turret ended at 1650), but this gives a safe non-zero starting point.
+
+</Procedure>
+
+## 3.3 Arm (Position)
+
+<ProcedureLinks mechanism="Arm" mode="torque" />
+
+kG is especially easy to calculate in torque mode: gravity torque converts straight to motor torque, and motor torque straight to current. That's one fewer step than in voltage mode, and it doesn't depend on $R$.
+
+### 3.3.1 Control Output Equation
+
+For `PositionTorqueCurrentFOC` with `GravityType = Arm_Cosine`:
+
+$$
+I_q(t) = k_S \cdot \sigma_{\text{kS}} + k_G \cos(\theta) + k_P \cdot e_\theta + k_I \int e_\theta\,dt + k_D \cdot \dot{e}_\theta
+$$
+
+with $\sigma_{\text{kS}}$ set by `StaticFeedforwardSign` ([§1.2.1](/docs/controls/ctre/foundation#121-the-staticfeedforwardsign-config)). Use `UseClosedLoopSign` without a profile: kG supplies the holding current, and kS only needs to act on small corrections, in whichever direction the error points.
+
+For `MotionMagicExpoTorqueCurrentFOC`:
+
+$$
+I_q(t) = k_S \cdot \mathrm{sgn}(v_{\text{ref}}) + k_G \cos(\theta) + k_V \cdot v_{\text{ref}} + k_A \cdot a_{\text{ref}} + k_P \cdot e_\theta + k_I \int e_\theta\,dt + k_D \cdot \dot{e}_\theta
+$$
+
+### 3.3.2 First-Principles kG in Torque Mode
+
+The current required to hold an arm at horizontal is:
+
+$$
+I_{\text{hold}} = \frac{\tau_{\text{gravity}}}{G \cdot k_t} = \frac{m \cdot g \cdot L_{\text{cg}}}{G \cdot k_t}
+$$
+
+Example: 5 kg arm with CG at 0.4 m from pivot, gear ratio 100:1, Kraken X60 in FOC mode ($k_t = 0.0194$ N·m/A from [§1.6.2](/docs/controls/ctre/motor-constants#162-derived-electromechanical-constants)):
+
+$$
+I_{\text{hold}} = \frac{5 \cdot 9.81 \cdot 0.4}{100 \cdot 0.0194} = 10.1 \text{ A}
+$$
+
+So kG ≈ 10 A. The same arm on a Kraken X44 (FOC, $k_t = 0.0152$) needs ~12.9 A. The whole calculation uses only the mechanism's geometry and one number from the motor table.
+
+### 3.3.3 Tuning Procedure
+
+<Procedure mechanism="Arm" mode="torque">
+
+CTRE uses a **bracketing method** that finds kG and kS in one pass. At horizontal, where gravity torque is largest, friction first helps hold the arm up and then resists pushing it up, so the two thresholds straddle kG by ±kS:
+
+1. **Set the zero** (horizontal = 0), as in voltage mode.
+2. **Set `StaticFeedforwardSign`:** `UseClosedLoopSign` for plain `PositionTorqueCurrentFOC`, the default for Motion Magic.
+3. **Zero all gains:** kP, kI, kD, kS, kV, kA.
+
+4. **Find the lower bound (`kG_low`).** Hold the arm at horizontal and raise kG to the smallest value at which the arm doesn't fall when you let go. This is $k_G - k_S$, because friction is helping.
+   - Doubling finds it fast (1, 2, 4, 8, 16 A). Then narrow down.
+
+5. **Find the upper bound (`kG_high`).** Keep raising kG to the largest value at which the arm still doesn't start moving *up*. This is $k_G + k_S$.
+
+6. **Compute kG and kS:**
+
+$$
+k_G = \frac{kG_{\text{high}} + kG_{\text{low}}}{2}, \qquad k_S = \frac{kG_{\text{high}} - kG_{\text{low}}}{2}
+$$
+
+   Splitting the bracket this way is more accurate than measuring kG and kS separately. Compare kG with the physics value from [§3.3.2](#332-first-principles-kg-in-torque-mode). They should agree within 10–15%.
+
+7. **Command a small move,** typically 0.1 mechanism rotations from where the arm is.
+
+8. **Raise kP and kD together** as for the turret ([§3.2.3](#323-tuning-procedure), step 6), until more kD makes things worse or the arm oscillates on its way to the setpoint. Then back off kD, then kP.
+
+9. **Test several moves across the range.** A move from near vertical toward horizontal takes gravity torque from almost nothing to its maximum, which can expose a kP that works on small moves but overshoots on long ones. CTRE's example arm did exactly this: kP had to come back from 4000 to 3700.
+
+10. **For Motion Magic,** follow [§3.0.5](#305-profiled-tuning-motion-magic-with-torquecurrentfoc). kA and kV only matter once there is a profile.
+
+**Worked example from CTRE.** A 35:1 arm ended at kG = 21 A and kS = 3.5 A (brackets at 17.5 A and 24.5 A), kP = 3700 A/rotation, kD = 300 A/(rotation/s).
+
+</Procedure>
+
+**Practice the bracketing test.** The simulated arm below has hidden kG and kS. Find the smallest kG that holds it and the largest that doesn't lift it, record both, then reveal the true values to check your answer.
+
+<BracketingSimulator />
+
+### 3.3.4 Compound Arms (Multi-Joint)
+
+On a two-joint arm (shoulder plus elbow), gravity torque on the shoulder depends on the elbow angle too:
+
+$$
+\tau_{\text{shoulder, gravity}} = m_1 g \, r_1 \cos(\theta_1) + m_2 g \bigl(L_1 \cos(\theta_1) + r_2 \cos(\theta_1 + \theta_2)\bigr)
+$$
+
+where $L_1$ is the length of the first link (shoulder to elbow), $r_1$ and $r_2$ are the distances from each joint to its link's center of gravity, and $\theta_2$ is measured relative to the first link. Add the elbow motor and any payload as point masses if they are significant.
+
+`Arm_Cosine` only handles a single cosine. For two joints, compute the gravity current in code, pass it through the request's `FeedForward` argument (Amps in torque mode), and set slot kG to 0:
+
+```java
+private final MotionMagicExpoTorqueCurrentFOC control = new MotionMagicExpoTorqueCurrentFOC(0);
+...
+double gravityFF = computeShoulderGravityCurrent(shoulderAngle, elbowAngle);
+shoulderMotor.setControl(control.withPosition(targetAngle).withFeedForward(gravityFF));
+```
+
+This is where torque mode really shines: gravity torque from physics becomes a current command with one division by $G \cdot k_t$.
+
+## 3.4 Elevator (Position)
+
+<ProcedureLinks mechanism="Elevator" mode="torque" />
+
+Elevators are easy in torque mode: the dynamics are linear and gravity is a constant.
+
+### 3.4.1 Control Output Equation
+
+For `MotionMagicExpoTorqueCurrentFOC` with `GravityType = Elevator_Static`:
+
+$$
+I_q(t) = k_S \cdot \mathrm{sgn}(v_{\text{ref}}) + k_G + k_V \cdot v_{\text{ref}} + k_A \cdot a_{\text{ref}} + k_P \cdot e_x + k_I \int e_x\,dt + k_D \cdot \dot{e}_x
+$$
+
+### 3.4.2 First-Principles Gains
+
+For an elevator with output mass $m$, drum radius $r$, and gear ratio $G$:
+
+$$
+k_G = \frac{m \cdot g \cdot r}{G \cdot k_t}, \qquad k_A = \frac{m \cdot r}{G \cdot k_t} \;\; \left[\tfrac{\text{A}}{\text{m/s}^2}\right] \quad\text{or}\quad k_A = \frac{2\pi \cdot m \cdot r^2}{G \cdot k_t} \;\; \left[\tfrac{\text{A}}{\text{drum-rot/s}^2}\right]
+$$
+
+**Use the kA form that matches your units.** kG is a plain current, the same whatever your units. kA is not: it depends on what `SensorToMechanismRatio` makes one "mechanism unit". Meters of carriage travel → left form. Drum rotations → right form. The two differ by $2\pi r$, the travel per drum turn, which is a handy check.
+
+Start tuning from these values and confirm them with the measurements below.
+
+The calculator does the arithmetic for both kA forms. Switch it to Arm for the calculation in [§3.3.2](#332-first-principles-kg-in-torque-mode).
+
+<GravityCalculator mechanism="elevator" />
+
+
+### 3.4.3 Why Torque Mode Suits Elevators
+
+1. **Predictable acceleration.** $a = (I - I_{\text{gravity}}) / (m r / (G k_t))$: a given current gives a known acceleration at any speed, within the voltage headroom of [§3.0.1](#301-why-torque-control-is-different).
+2. **Current is bounded explicitly.** `PeakForwardTorqueCurrent` / `PeakReverseTorqueCurrent` cap the output directly, so you can size them for the hardest acceleration and know they won't be exceeded. (Voltage mode relies on the stator and supply limits for the same job.)
+3. **The same force up and down.** Current-to-force is identical in both directions. In voltage mode, back-EMF eats into headroom on fast up-moves while gravity helps on down-moves, so the loop feels different each way. Torque mode removes that difference (again within the voltage headroom). The *friction* difference of [§2.4.6](/docs/controls/ctre/voltage#246-asymmetric-friction) is mechanical and stays.
+
+### 3.4.4 Tuning Procedure
+
+<Procedure mechanism="Elevator" mode="torque">
+
+1. **Set soft limits, current limits, and homing,** as for the voltage-mode elevator. Not optional.
+2. **Set `StaticFeedforwardSign`:** `UseClosedLoopSign` for plain `PositionTorqueCurrentFOC`, the default for Motion Magic.
+3. **Zero all gains.**
+4. **Find kG and kS by bracketing,** as for the arm ([§3.3.3](#333-tuning-procedure)):
+   - Raise kG to the smallest value at which the elevator stops sliding down: that is $k_G - k_S$.
+   - Keep raising it to the largest value at which it still doesn't start rising: that is $k_G + k_S$.
+   - kG is the midpoint and kS is half the difference. Compare kG with the physics value from [§3.4.2](#342-first-principles-gains). They should agree within 10–15%.
+5. **Command a small move,** e.g., 0.1 mechanism units from where it is.
+6. **Raise kP and kD together** as in [§3.2.3](#323-tuning-procedure). Elevators are rigid and tolerate aggressive kP. Expect a higher kP than on a similar-sized arm.
+7. **Test several moves,** including full-travel moves up and down. Friction that differs by direction often shows up here as different overshoot each way. If it's significant, use one slot for up-moves and another for down-moves.
+8. **For Motion Magic,** follow [§3.0.5](#305-profiled-tuning-motion-magic-with-torquecurrentfoc) to add kA and kV, starting kA from the physics value in [§3.4.2](#342-first-principles-gains).
+
+</Procedure>
+
+## 3.5 Linear Deployment (Position)
+
+<ProcedureLinks mechanism="Linear deployment" mode="torque" />
+
+Most short deployments don't need torque mode. Voltage mode is simpler to set up, and moves this short are mostly acceleration and deceleration anyway. **The exception is any deployment that needs force control rather than position control.**
+
+### 3.5.1 Force-Limited Deployment
+
+A typical case is a climber hook that extends until it touches the chain or bar and then pulls with a controlled force. With torque-current control:
+
+1. Drive to position with `PositionTorqueCurrentFOC` (or Motion Magic) and a tight current limit.
+2. Once there, switch to `TorqueCurrentFOC` (open-loop torque) with the holding current you want.
+
+`TorqueCurrentFOC` simply outputs the commanded current:
+
+$$
+I_q(t) = I_{\text{commanded}}
+$$
+
+No PID, no feedforward: just "produce this much torque." That is exactly what "pull with this much force" needs. A 30 A hold gives a known motor torque, and so a known force on the hook, wherever the mechanism is.
+
+### 3.5.2 Hybrid Position+Force Control
+
+```java
+private final TorqueCurrentFOC holdRequest = new TorqueCurrentFOC(0);
+private final MotionMagicExpoTorqueCurrentFOC moveRequest = new MotionMagicExpoTorqueCurrentFOC(0);
+...
+if (deploymentExtended && readyToApplyForce) {
+  motor.setControl(holdRequest.withOutput(holdingAmps));
+} else {
+  motor.setControl(moveRequest.withPosition(targetPosition));
+}
+```
+
+(Create control requests once and update them each loop, rather than allocating new ones.)
+
+The state machine follows a position while extending and applies a set force while holding. Voltage mode can't do this cleanly. At a stall, current is $V/R$, and $R$ changes by around 25% as the motor warms up ([§1.6.4](/docs/controls/ctre/motor-constants#164-caveats)), so a fixed voltage doesn't give a fixed force.
+
+### 3.5.3 Tuning Procedure
+
+<Procedure mechanism="Linear deployment" mode="torque">
+
+**Position phase:** use the normal torque-mode workflow. Calculate kG and kA from physics, measure kS, and tune kP and kD by watching the response ([§3.4.4](#344-tuning-procedure) if gravity acts on it, [§3.2.3](#323-tuning-procedure) if it slides horizontally).
+
+**Force phase:** nothing to tune, since current maps directly to force. You only need to:
+
+1. Convert the force you want to current: $I = F \cdot r / (G \cdot k_t)$, with $r$ the drum radius (or moment arm).
+2. Keep long holds within what the motor can sustain thermally. Check the motor's published thermal data, and watch motor temperature during long holds.
+3. Set `StatorCurrentLimit` and `PeakForwardTorqueCurrent` / `PeakReverseTorqueCurrent` a little above the hold current as a safety cap.
+
+</Procedure>

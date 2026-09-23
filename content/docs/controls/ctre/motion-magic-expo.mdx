@@ -1,0 +1,165 @@
+---
+title: Motion Magic Expo
+description: How the exponential profile is built from the motor model, and how to tune it.
+---
+
+## 1.4.1 Motion Magic Expo in Detail
+
+Trapezoidal Motion Magic asks "how fast did the user say this may move?" Expo asks "how fast *can* this move?" A hand-picked trapezoidal acceleration is usually either too aggressive (the motor saturates and falls behind the profile) or too timid (time wasted on every move). Expo avoids the guess by building the profile from a model of the motor.
+
+**The short version.** Expo uses two configs in `MotionMagicConfigs`:
+
+| Config | Meaning | What it sets |
+|:---|:---|:---|
+| `MotionMagicExpo_kV` | Volts needed to hold 1 mechanism rotation/s | Top speed: $v_{\max} = V_{\text{supply}} / \text{Expo\_kV}$ |
+| `MotionMagicExpo_kA` | Volts needed to accelerate at 1 mechanism rotation/s², from rest | Starting acceleration: $a_{\max} = V_{\text{supply}} / \text{Expo\_kA}$ |
+
+- **Bigger values give a slower profile.** This is backwards from kP intuition. A high kV means the motor needs a lot of voltage per rotation/s, so it tops out lower.
+- **The profile uses the measured supply voltage**, so a sagging battery slows it down automatically.
+- **Both configs are always in Volts**, even with TorqueCurrentFOC or DutyCycle requests. There is no FOC variant.
+- `MotionMagicCruiseVelocity` optionally caps top speed below $v_{\max}$. Leave it at 0 for no cap. `MotionMagicAcceleration` and `MotionMagicJerk` are ignored.
+- The defaults (0.12 V/rps and 0.1 V/(rps/s)) are placeholders unrelated to your mechanism. Always set both.
+
+**Try it.** Pick a motor, gear ratio, and inertia to see the configs to enter and the profile they produce. Then drag the trapezoidal acceleration to see where a hand-picked trapezoid asks for more than the motor can give.
+
+<ExpoExplorer />
+
+The rest of this section shows where those formulas come from. If you just want to tune, skip to [§1.4.2](#142-tuning-motion-magic-expo-parameters).
+
+**The motor model.** A brushless motor at steady state obeys:
+
+$$
+V = R \cdot I + k_e \cdot \omega
+$$
+
+$V$ is the voltage at the motor, $R$ the (effective) winding resistance, $I$ the torque-producing current, $k_e$ the back-EMF constant (V·s/rad), and $\omega$ the rotor speed (rad/s). The first term is the resistive drop. The second is the back-EMF the spinning motor generates. (Inductance can be ignored: the electrical time constant $L/R$ is far shorter than the mechanical one.)
+
+Torque is proportional to current, $\tau = k_t \cdot I$, so:
+
+$$
+\tau = \frac{k_t}{R}\,(V - k_e \cdot \omega)
+$$
+
+Torque is highest at rest and falls linearly with speed, reaching zero at the no-load speed $\omega_{\max} = V/k_e$, where back-EMF cancels the applied voltage.
+
+**Where the exponential comes from.** Add Newton's second law. $J$ is the total inertia seen at the rotor (rotor plus mechanism, reflected through the gearbox), with no external load:
+
+$$
+J \frac{d\omega}{dt} = \frac{k_t}{R}\,(V - k_e \cdot \omega)
+$$
+
+This is a first-order system with time constant:
+
+$$
+\tau_m = \frac{R \cdot J}{k_t \cdot k_e}
+$$
+
+Applying full voltage $V$ from rest gives the familiar exponential rise:
+
+$$
+\omega(t) = \omega_{\max}\,\bigl(1 - e^{-t/\tau_m}\bigr), \quad \omega_{\max} = \frac{V}{k_e}
+$$
+
+**This is the curve Expo generates** — what the motor would do on its own at full voltage. By construction, the profile never asks for more than the motor can deliver.
+
+**Linking the configs to the motor.** With a gear reduction $G$ ($G > 1$), one mechanism rotation per second is $2\pi G$ rad/s at the rotor. Holding a speed takes only back-EMF voltage ($I = 0$), and accelerating from rest takes only resistive voltage ($V = R \cdot J \dot\omega / k_t$). Per mechanism unit:
+
+$$
+\text{Expo\_kV} = 2\pi \cdot k_e \cdot G \quad \text{[V per mechanism rotation/s]}
+$$
+
+$$
+\text{Expo\_kA} = 2\pi \, \frac{R \cdot J \cdot G}{k_t} \quad \text{[V per mechanism rotation/s}^2\text{]}
+$$
+
+In voltage mode these are the same quantities as the slot kV and kA that SysId identifies (in mechanism units).
+
+Plugging full supply voltage into these gives the two limits from the table above: $v_{\max} = V_{\text{supply}}/\text{Expo\_kV}$ and $a_{\max} = V_{\text{supply}}/\text{Expo\_kA}$. Their ratio is the profile's time constant, which is exactly the motor's:
+
+$$
+\tau_{\text{profile}} = \frac{\text{Expo\_kA}}{\text{Expo\_kV}} = \frac{2\pi \cdot R \cdot J \cdot G / k_t}{2\pi \cdot k_e \cdot G} = \frac{R \cdot J}{k_t \cdot k_e} = \tau_m
+$$
+
+The $2\pi$ and $G$ cancel, so the time constant depends only on the motor and the inertia reflected to the rotor.
+
+**The generated trajectory.** Starting from rest, the profile velocity and acceleration are:
+
+$$
+v(t) = v_{\max}\,\bigl(1 - e^{-t/\tau_{\text{profile}}}\bigr), \qquad a(t) = a_{\max} \cdot e^{-t/\tau_{\text{profile}}}
+$$
+
+(The acceleration follows by differentiating, using $v_{\max}/\tau_{\text{profile}} = V_{\text{supply}}/\text{Expo\_kA} = a_{\max}$.)
+
+Acceleration is **highest at the start**, when there is no back-EMF to fight, and **decays toward zero** as the mechanism approaches top speed. After one time constant, velocity is at $1 - 1/e \approx 63\%$ of $v_{\max}$ and acceleration has fallen to $1/e \approx 37\%$ of its starting value. Deceleration mirrors this. Because acceleration jumps straight to its maximum at $t = 0$, Expo does **not** limit jerk.
+
+**Numerical check.** A Kraken X60 (FOC) at 12 V, using constants from [§1.6.2](/docs/controls/ctre/motor-constants#162-derived-electromechanical-constants):
+- $k_e = 0.0198$ V·s/rad, $k_t = 0.0194$ N·m/A, $R = 0.0248$ Ω
+- A small turret: $G = 50$, total inertia at the rotor $J = 1 \times 10^{-4}$ kg·m²
+- $\text{Expo\_kV} = 2\pi \cdot 0.0198 \cdot 50 \approx 6.22$ V per (mechanism rotation/s)
+- $\text{Expo\_kA} = 2\pi \cdot (0.0248 \cdot 10^{-4} \cdot 50) / 0.0194 \approx 0.040$ V per (mechanism rotation/s²)
+- $v_{\max} = 12 / 6.22 \approx 1.93$ rotation/s ≈ 116 RPM at the turret
+- $a_{\max} = 12 / 0.040 = 300$ rotation/s² at the instant the move starts
+- $\tau_{\text{profile}} = 0.040 / 6.22 \approx 6.4$ ms
+
+After 6.4 ms the turret is at ~73 RPM (63% of top speed). After ~19 ms (three time constants) it is at ~110 RPM (95%). Ten times the inertia gives a 64 ms time constant. Real FRC mechanisms often land around 30–100 ms.
+
+**Why this beats a trapezoid.** With a trapezoid you guess $a_{\max}$. Guess low and every move is slower than it needs to be. Guess high and the motor saturates, and the mechanism falls further behind the profile as speed builds. Either way, the PID has to absorb the mismatch as error.
+
+Expo's profile always asks for an acceleration the motor can produce at its current speed, because the profile *is* the motor model. The slot feedforwards (kS, kV, kA, kG) cancel the modeled behavior, and the PID only corrects disturbances and modeling error. Tracking error is much lower.
+
+**Slot kV/kA vs. Expo_kV/Expo_kA.** They look alike but do different jobs:
+
+| Parameter | Used by | Purpose |
+|:---|:---|:---|
+| `Slot0Configs.kV` | Closed-loop feedforward, every loop | Output per unit of *commanded* velocity |
+| `Slot0Configs.kA` | Closed-loop feedforward, every loop | Output per unit of *commanded* acceleration |
+| `MotionMagicExpo_kV` | Profile generator | Volts to *hold* a velocity. Sets top speed. |
+| `MotionMagicExpo_kA` | Profile generator | Volts to *cause* an acceleration. Sets starting acceleration and time constant. |
+
+In voltage mode, slot kV/kA and Expo_kV/Expo_kA describe the same physics and should roughly match. In torque-current mode they come apart: slot kV is in Amps and usually near zero (the current loop has already removed back-EMF), while `MotionMagicExpo_kV` is still in Volts and still describes the motor's back-EMF. Set both independently.
+
+## 1.4.2 Tuning Motion Magic Expo Parameters
+
+<Procedure mechanism="Motion Magic Expo">
+
+Start from the kV and kA of a voltage-mode SysId run and refine on the robot. CTRE's advice is to **start Expo_kV and Expo_kA higher than ideal.** Too high only makes the profile slower, which is safe. Too low makes it ask for more than the motor can deliver, and the mechanism falls behind.
+
+Tune the slot gains (kV, kA, kP, kD) first. Then:
+
+1. **Start values.** Set `MotionMagicExpo_kV` = slot kV and `MotionMagicExpo_kA` = slot kA (voltage mode). For a torque-current mechanism, use kV and kA from a voltage-mode SysId run on the same mechanism, or compute them with the formulas in [§1.4.1](#141-motion-magic-expo-in-detail). Set `MotionMagicCruiseVelocity = 0` (no cap).
+
+2. **Add margin.** Multiply both by 1.1–1.2. You give up a little speed, but the motor can always keep up. Trim it back later once you have data.
+
+3. **Log a long move** in AdvantageScope or Tuner X:
+   - `ClosedLoopReference` (profile position) and `ClosedLoopReferenceSlope` (profile velocity)
+   - `Position` and `Velocity`
+   - `MotorVoltage` (voltage mode) or `TorqueCurrent` (torque mode)
+
+4. **Check top speed (Expo_kV).**
+   - Velocity falls further behind the reference as speed builds, with output saturated → Expo_kV is too low. The profile wants more speed than the motor has. Raise it until the traces line up.
+   - Velocity tracks, but motor voltage stays well below supply near top speed → Expo_kV is higher than needed. Lower it in ~5% steps to gain speed.
+
+5. **Check the start of the move (Expo_kA).**
+   - Velocity lags the reference right from the start while output is saturated → Expo_kA is too low. Raise it.
+   - Velocity tracks and output stays well below saturation during the initial acceleration → Expo_kA is higher than needed. Lower it in small steps.
+
+6. **Cap top speed if needed.** If the top speed is mechanically uncomfortable (vibration, chain whip), set `MotionMagicCruiseVelocity` below $V_{\text{supply}}/\text{Expo\_kV}$.
+
+7. **Test the worst cases:**
+   - A tired battery (under 12.0 V resting). The profile slows down on its own. Confirm that tracking is still tight.
+   - The worst-case pose (arm horizontal, elevator fully extended). Gravity eats into the voltage available for motion.
+   - A short move, where the profile has to start slowing down almost as soon as it starts. This stresses deceleration. Errors here usually mean Expo_kA is too low.
+
+</Procedure>
+
+## 1.4.3 Common Mistakes with Motion Magic Expo
+
+- **Setting Expo_kV near zero in torque mode.** Slot kV in torque mode is in Amps and often near zero, but `MotionMagicExpo_kV` is still in Volts and still describes back-EMF. A tiny Expo_kV (the API minimum is 0.001) produces a profile far faster than the motor. The motor saturates immediately and you effectively get a step response.
+
+- **Leaving the defaults.** 0.12 V/rps and 0.1 V/(rps/s) are generic placeholders. On a geared mechanism they describe a far faster motor than you have. Always set both.
+
+- **Setting `MotionMagicAcceleration` for Expo.** Expo silently ignores it. To limit acceleration, raise Expo_kA. Jerk cannot be limited at all, since the profile starts at full acceleration. If you need jerk limiting, use trapezoidal Motion Magic with `MotionMagicJerk`.
+
+- **Tuning the profile before the slot gains.** If the closed loop can't track, you'll see error and wrongly blame Expo_kV. Tune the loop on slow setpoints first, then the profile.
+
+- **Brownout surprises.** The profile uses measured supply voltage, so if the bus sags to 10 V, top speed drops to $10/\text{Expo\_kV}$ for that moment. Usually harmless, but it can show up as velocity dips on power-hungry robots. `ClosedLoopReference` shows the recomputed profile.
