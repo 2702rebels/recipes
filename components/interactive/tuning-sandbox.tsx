@@ -176,13 +176,11 @@ export const TuningSandbox = () => {
           label="Overshoot"
           value={fmt(sim.overshoot * 100, 2)}
           unit="%"
-          emphasis
         />
         <Readout
           label="Settles within 2%"
           value={settled ? fmt(sim.settlingTime * 1000) : "never"}
           unit={settled ? "ms" : undefined}
-          emphasis
         />
         <Readout
           label="Error at 600 ms"

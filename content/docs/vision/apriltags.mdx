@@ -1,0 +1,94 @@
+---
+title: AprilTags
+description: What an AprilTag is, how a detector finds one in an image, how FRC places tags on the field, and what limits detection.
+---
+
+An **AprilTag** is a printed black-and-white square that a camera can find quickly and identify without mistakes. It is a **fiducial**: a marker placed at a known position so that measurements can be made against it. FRC fields have had AprilTags since 2023. Since 2024 they use the **36h11** family, with a 6.5 in (165.1 mm) black square.
+
+## 3.1 Why tags
+
+Before tags, FRC vision targets were strips of retroreflective tape lit by a ring of LEDs on the robot. Tape is easy to see but hard to use: every strip looks the same, and a strip gives only a few points. Tags fix both problems:
+
+- **Each tag has an ID.** The robot knows exactly *which* landmark it sees, so it can look up that tag's pose in the field layout.
+- **Each tag gives four corners.** Four points at known positions are enough to solve the camera's full 3D pose from a single tag (see [PnP](/docs/vision/pose-estimation#44-the-perspective-n-point-problem)).
+- **They are passive and cheap.** They are printed on paper. No lights are needed beyond normal field lighting.
+- **Detection is reliable.** The code is designed so that random patterns (a bumper number, a poster in the stands) almost never pass as a tag.
+
+## 3.2 Anatomy of a tag
+
+<AprilTagAnatomy />
+
+- **White border.** Separates the tag from whatever is behind it. The detector needs contrast all the way around.
+- **Black border.** One cell wide. This is the square the detector looks for first.
+- **Data cells.** A 6 × 6 grid of black and white cells: 36 bits. The pattern encodes the tag's ID.
+- **Four corners.** The outer corners of the black square. They are the detector's most important output, and the input to pose solving.
+
+The "36h11" name means 36 data bits, and a **minimum Hamming distance of 11**: any two codes in the family differ in at least 11 of their 36 bits. A few misread cells can be corrected, and it takes many misreads to turn one valid tag into another. The family has 587 codes, of which a season uses only a few dozen.
+
+The pattern is also chosen so that the tag looks different when rotated by 90°, 180°, or 270°. The detector therefore knows which corner is which, and that is what lets the four corners be matched to four known points.
+
+## 3.3 How a detector finds tags
+
+Detectors differ in details, but most follow the steps of the AprilTag library:
+
+1. **Convert to grayscale.** Color doesn't help.
+2. **Decimate (optional).** Shrink the image, for example by half in each direction, to speed up the search. This makes small (far) tags harder to find.
+3. **Threshold.** Mark each pixel as dark or light compared to its neighborhood, so uneven lighting doesn't matter.
+4. **Find edges and fit quadrilaterals.** Trace the boundaries between dark and light regions, and keep the ones that look like four-sided shapes.
+5. **Decode.** For each quad, sample the grid of cells inside it and compare the bits against every code in the family, in all four rotations. Accept it if it matches a code within a few bit errors.
+6. **Refine the corners.** Fit the edges of the black square precisely, to a fraction of a pixel, using the full-resolution image. Corner accuracy decides pose accuracy.
+
+For each tag found, the detector reports:
+
+| Output | Meaning | Used for |
+|:---|:---|:---|
+| **ID** | Which code matched | Looking up the tag in the field layout |
+| **Corners** | Pixel coordinates of the four corners, in a fixed order | Pose solving |
+| **Center** | Pixel coordinates of the tag's center | Simple aiming |
+| **Hamming** | How many bits had to be corrected | Rejecting doubtful detections |
+| **Decision margin** | How clearly dark and light cells differ | Rejecting low-contrast detections |
+
+Many teams discard detections that needed any bit correction, or that have a low decision margin. With a family as strong as 36h11 that rarely throws away good data, and it removes most false detections.
+
+## 3.4 Tags on the FRC field
+
+Every tag on the field has a unique ID and a known **pose**: the 3D position of its center and the direction its face points. The season's **field layout** lists them all. FIRST publishes the tag positions with the field drawings, and WPILib ships them as `AprilTagFieldLayout`:
+
+```java
+AprilTagFieldLayout layout = AprilTagFieldLayout.loadField(AprilTagFields.kDefaultField);
+Optional<Pose3d> tagPose = layout.getTagPose(7);
+```
+
+In the layout, each tag's rotation points the tag's own x axis straight out of its face, toward whoever is looking at it. Positions are in WPILib field coordinates: the origin is at the right-hand corner of the blue alliance wall as seen from the blue driver stations, $+x$ points toward the red alliance, $+y$ points to the left as seen from the blue driver stations, and $+z$ points up.
+
+<Callout type="warn" title="Welded or AndyMark field?">
+  For 2025 and 2026, WPILib has two layouts per season (for example `k2026RebuiltWelded` and `k2026RebuiltAndymark`),
+  because the two field builds place tags slightly differently. `kDefaultField` is only one of them. Find out which
+  field your events use, and load that layout.
+</Callout>
+
+Tags are placed in groups: several on the same structure, often on faces at different angles, and at different heights. Groups like this are ideal for [multi-tag solving](/docs/vision/pose-estimation#45-many-tags-one-solve), because the corners are spread out and not all in one plane.
+
+## 3.5 What limits detection
+
+A tag can only be decoded if each cell covers enough pixels. The black square is 8 cells across, so with the 1280×800, 70° camera used in the examples on these pages:
+
+| Distance | Tag width in the image | Pixels per cell |
+|:---|:---|:---|
+| 1 m | 151 px | 19 |
+| 2 m | 75 px | 9.4 |
+| 4 m | 38 px | 4.7 |
+| 6 m | 25 px | 3.1 |
+| 8 m | 19 px | 2.4 |
+
+These come from $w = f \cdot s / Z$, with the focal length $f = 914$ px and tag size $s = 0.1651$ m (see [§4.3](/docs/vision/pose-estimation#43-how-far-away-is-the-tag)). Decimating by 2 halves every number in the last column. A tag seen at an angle is narrower still, by the cosine of the angle.
+
+| Problem | Symptom | Fix |
+|:---|:---|:---|
+| **Too far** | Tag found only sometimes, noisy pose | Higher resolution, narrower lens, less decimation. Or accept that far tags are only useful with large standard deviations. |
+| **Steep angle** | Tag not found, or pose flips | Mount cameras so tags are seen closer to head-on during the tasks that matter |
+| **Motion blur** | No detections while driving or turning fast | Shorter exposure, with higher gain or brighter lighting. A rolling shutter also shears the tag (see [§5.6](/docs/vision/calibration#56-rolling-vs-global-shutter)). |
+| **Glare** | Tag missing from one direction only | Field lights reflect off the tag surface at some angles. Change the camera angle, or use another camera. |
+| **Partly blocked** | Tag never found while a game piece or robot covers it | The whole black border must be visible. Use more than one camera. |
+
+Next, [Pose Estimation](/docs/vision/pose-estimation) turns four corners into a pose.

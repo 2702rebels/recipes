@@ -95,13 +95,22 @@ Interactive widgets live in `components/interactive/`. The current set:
 | `GravityCalculator` | [Voltage](/docs/controls/ctre/voltage#233-calculating-kg-from-first-principles), [Torque-Current](/docs/controls/ctre/torque-current#342-first-principles-gains) | kG and kA from arm or elevator geometry, in Volts and Amps |
 | `BracketingSimulator` | [Torque-Current](/docs/controls/ctre/torque-current#333-tuning-procedure) | Finding kG and kS with the bracketing test |
 | `TuningSandbox` | [Torque-Current](/docs/controls/ctre/torque-current#torque-mode-has-no-built-in-damping) | Why torque mode needs kD, and where kD meets the latency limit |
+| `OdometryDrift` | [Why Vision](/docs/vision/localization#15-try-it-one-match-of-driving) | How odometry drifts, and how vision measurements pull a fused estimate back |
+| `RelativeVsGlobal` | [Positioning](/docs/vision/positioning#23-field-layout-errors-bias-vs-spread) | Bias and spread of relative and global positioning when a tag is off its layout position, on a top-down scene with a zoomed view of the scoring point |
+| `PinholeExplorer` | [Pose Estimation](/docs/vision/pose-estimation#43-how-far-away-is-the-tag) | How a tag projects into the image, and the second solution of a single-tag solve |
+| `PoseScatter` | [Pose Estimation](/docs/vision/pose-estimation#45-many-tags-one-solve) | How corner noise spreads the solved pose, for one or two tags, with and without gyro heading. Top-down scene of the camera and tags, with a zoomed inset |
+| `DistortionGrid` | [Calibration](/docs/vision/calibration#51-what-calibration-measures) | What radial distortion does to straight lines |
+| `CalibrationError` | [Calibration](/docs/vision/calibration#53-how-calibration-errors-become-pose-errors) | Pose error from wrong focal length, principal point, or ignored distortion. Top-down view of the true and estimated robot as it drives toward a tag |
+| `RollingShutter` | [Calibration](/docs/vision/calibration#56-rolling-vs-global-shutter) | A tag captured by a rolling or global shutter while the robot turns or drives, with the skew, blur, and pose errors that follow |
+
+Static diagrams that are not interactive live in `components/diagrams/` (for example `FrameChain` and `AprilTagAnatomy` on the Vision pages). They are server components, drawn as inline SVG with the same theme tokens.
 
 To add a new one:
 
 1. Create `components/interactive/my-widget.tsx`, starting with `"use client"`.
 2. Build it from the shared parts in `controls.tsx` (`Widget`, `Slider`, `Segmented`, `Readout`) and `plot.tsx` (`LinePlot`), so every widget looks the same.
 3. Take motor numbers from `lib/motors.ts` instead of repeating them. It holds the Kraken constants used across the guide.
-4. Put any simulation in a pure function under `lib/` (see `lib/turret-sim.ts`), separate from the React code, so it can be checked on its own.
+4. Put any simulation in a pure function under `lib/` (see `lib/turret-sim.ts` or `lib/vision.ts`), separate from the React code, so it can be checked on its own.
 5. Use theme colors only: `fd-*` Tailwind tokens for UI, and `var(--color-plot-*)` (defined in `app/global.css`) for plot lines, so light and dark mode both work.
 6. Register it in `components/mdx.tsx`, then use it in any page as `<MyWidget />`.
 

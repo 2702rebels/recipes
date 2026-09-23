@@ -1,0 +1,165 @@
+---
+title: Camera Calibration
+description: What camera calibration measures, why nominal values are not enough, how calibration errors turn into pose errors, how to calibrate a camera well, and how a rolling shutter distorts tags on a moving robot.
+---
+
+**Every camera used for pose estimation must be calibrated, at the resolution it runs at.** The solver on the [previous page](/docs/vision/pose-estimation) turns pixels into rays using the camera's intrinsics and lens distortion. If those numbers are wrong, every ray is wrong, and no amount of filtering fixes it. A calibration error is a **bias**: it doesn't average out, and it's the same in every frame.
+
+## 5.1 What calibration measures
+
+Calibration finds two sets of numbers that describe the camera itself:
+
+| Parameters | Symbols | What they describe |
+|:---|:---|:---|
+| **Focal lengths** | $f_x$, $f_y$ | How many pixels one unit of angle spans. Sets the scale of everything. |
+| **Principal point** | $c_x$, $c_y$ | Where the optical axis hits the sensor. Near the image center, but rarely exactly on it. |
+| **Radial distortion** | $k_1$, $k_2$, $k_3$ | How the lens bends straight lines, more and more toward the edges |
+| **Tangential distortion** | $p_1$, $p_2$ | A small effect from the lens not being exactly parallel to the sensor |
+
+The first two rows are the matrix $K$ from [§4.2](/docs/vision/pose-estimation#42-the-pinhole-camera). The distortion model most tools use (Brown–Conrady, as in OpenCV) moves each normalized image point $(x, y)$ to a distorted one:
+
+$$
+x_d = x\,(1 + k_1 r^2 + k_2 r^4 + k_3 r^6) + 2 p_1 x y + p_2 (r^2 + 2x^2)
+$$
+
+$$
+y_d = y\,(1 + k_1 r^2 + k_2 r^4 + k_3 r^6) + p_1 (r^2 + 2y^2) + 2 p_2 x y
+$$
+
+Where $r^2 = x^2 + y^2$ is the squared distance from the image center, in normalized units. At the center $r = 0$ and nothing moves. The effect grows quickly toward the edges. Very wide (fisheye) lenses need a different model.
+
+A separate measurement, the **extrinsics** or **mount**, describes where the camera sits on the robot. It is covered in [§5.5](#55-extrinsics-where-the-camera-is-on-the-robot).
+
+<DistortionGrid />
+
+Negative $k_1$ is **barrel** distortion: straight lines bow outward and the edges of the image are squeezed toward the center. Positive $k_1$ is **pincushion** distortion. With the default $k_1 = -0.15$, a point at the image corner is moved about 77 px. That is enormous compared to the half-pixel corner accuracy the solver needs.
+
+## 5.2 Why nominal values are not enough
+
+It is tempting to compute $f_x$ from the lens's advertised field of view and put $c_x, c_y$ at the image center. Don't:
+
+- **Lenses vary.** The real focal length of a small lens can differ from its nominal value by several percent, and each unit differs.
+- **Sensors are not centered.** The principal point is often tens of pixels from the image center, because the lens and sensor are not perfectly aligned.
+- **Distortion is always there.** Even lenses sold as low-distortion bend lines by several pixels at the edges.
+- **Calibration depends on the video mode.** Changing resolution can crop or bin the sensor, which changes every intrinsic. Calibrate at the exact resolution and mode used in matches.
+
+## 5.3 How calibration errors become pose errors
+
+Each kind of calibration error has its own signature:
+
+| Error | Effect on the pose | Example |
+|:---|:---|:---|
+| **Focal length** too long by $x\%$ | Every distance is too long by $x\%$. The tag looks smaller than the solver expects. | +3% → 12 cm too far at 4 m |
+| **Principal point** off by $\delta$ px | Every direction is off by $\delta / f$ radians. Sideways error grows with distance. | 20 px → 1.25° → 8.8 cm sideways at 4 m |
+| **Unmodeled distortion** | Small near the image center, large near the edges. Also skews the tag's shape, which the solver reads as a turned tag. | $k_1 = -0.15$ ignored, tag 25° off center → 11 cm range error and a 21° tag angle error at 4 m |
+
+The first two follow directly from the pinhole equations. The range estimate is $Z = f s / w$, so a wrong $f$ scales every range. A pixel's direction is $\arctan\big((u - c_x) / f\big)$, so a wrong $c_x$ rotates every ray.
+
+<CalibrationError />
+
+The top-down view shows the robot driving straight at a tag, and where the solver puts it at each meter. The green path is the truth, and the colored path is the estimate. The plot below it shows the same errors against distance.
+
+Things to try:
+
+- **Focal length error only.** The robot is placed too far from the tag (or too close, for a negative error). The range error is a straight line through zero: always the same percentage of the distance.
+- **Principal point error only.** The estimated path angles off to one side. The sideways error grows with distance, and the range error stays near zero.
+- **Distortion only, tag at the center.** Almost no error. Move the tag bearing to 25° and the errors appear. Tags near the image edges are hit hardest.
+- **Watch the reprojection error.** With $k_1 = -0.15$ ignored and the tag 25° off center, the robot is off by about 12 cm at 4 m, but the solver reports under 0.1 px of reprojection error. **A low reprojection error on the field does not prove the calibration is right.** The solver finds a wrong pose that fits the distorted corners well.
+- **Switch the heading to "Solved from the tag"** with the same distortion. The tag angle comes out about 21° wrong, and the robot lands about 1.4 m to the side at 4 m. A single-tag solve turns a tag angle error into sideways error ([§4.5](/docs/vision/pose-estimation#45-many-tags-one-solve)). With the heading from the gyro, only the range and sideways errors of the tag's position remain.
+
+## 5.4 How to calibrate well
+
+Calibration takes pictures of a flat pattern with known geometry, such as a checkerboard or a ChArUco board (a checkerboard with small markers in its white squares, so it can be found even when partly out of view), from many angles. A solver then finds the intrinsics and distortion that best explain every picture at once.
+
+1. **Lock the camera settings first.** Set the resolution and video mode used in matches. Set the focus and lock it (glue or a set screw), because turning the focus ring changes the focal length. Any change later means calibrating again.
+2. **Use a flat, rigid board.** Print the pattern and mount it on something stiff and flat, such as foam board, aluminum, or glass. A board that bends gives a wrong distortion estimate. Enter the square size you actually measured.
+3. **Fill the whole image.** Distortion is only measured where the board appears. Take plenty of views with the board near the corners and edges of the image, not just the center.
+4. **Tilt the board.** Include views turned up to about 45° in different directions, at a range of distances. If every view faces the camera straight on, the solver can't separate focal length from distance.
+5. **Take enough sharp views.** Aim for 20 to 50. Hold the board still, and delete any blurry image.
+6. **Check the result.**
+   - The overall RMS reprojection error should be low. Under about 0.5 px is a common target. Above 1 px, look for bad views or a bent board.
+   - $f_x$ and $f_y$ should be nearly equal, and $c_x$, $c_y$ should be near (not exactly at) the image center.
+   - Look at the per-image errors, remove views that stand out, and calibrate again.
+7. **Check it on the field.** Place the robot at measured spots in front of tags and compare the reported pose with the tape measure. A steady range error that grows with distance points at the focal length. A sideways error points at the principal point or the mount.
+8. **Keep the file with the camera.** Label each camera and store its calibration with it. A calibration belongs to one physical camera, not to a camera model.
+
+## 5.5 Extrinsics: where the camera is on the robot
+
+The mount transform ${}^{R}T_{C}$ (see [§4.1.2](/docs/vision/pose-estimation#412-the-chain-from-camera-to-field)) is the camera's position and angle on the robot. It enters every measurement, so its errors are biases too:
+
+| Mount error | Effect | Example at 4 m |
+|:---|:---|:---|
+| **Yaw** (left-right angle) | Heading off by the same angle, and position swung sideways | 1° → about 7 cm sideways |
+| **Pitch** (up-down angle) | Mostly a height error. Also a range error when tags are well above or below the camera. | 1° → about 7 cm in height |
+| **Position** | The whole pose shifted by the same amount, at every distance | 1 cm → 1 cm |
+
+The 7 cm figures are just $d \cdot \delta\theta = 4 \text{ m} \times 0.0175$ rad.
+
+To get the mount right:
+
+1. **Start from CAD.** Measure the lens position and angles in the robot model, relative to the robot's center on the floor.
+2. **Mount the camera rigidly.** A mount that flexes or vibrates changes the transform during the match.
+3. **Check on the field.** Place the robot at a measured spot, facing a tag head-on. The reported heading error is the mount yaw error. The reported position error, after the heading is fixed, is mostly the mount position error.
+4. **Check the roll and pitch of the solved pose.** On a flat floor the robot's roll and pitch are zero. A steady nonzero value points at a mount angle error.
+
+## 5.6 Rolling vs. global shutter
+
+**For pose estimation on a moving robot, use a global-shutter camera if you can.** With a rolling shutter, take the heading from the gyro, timestamp each measurement at the moment the tag's rows were read, and trust single-tag solves less while the robot turns.
+
+The shutter decides *when* each row of the image is captured:
+
+- **Global shutter.** Every pixel is exposed over the same interval. The whole image is one moment in time.
+- **Rolling shutter.** Each row starts its exposure a little after the row above it. The bottom row is captured one **readout time** after the top row. The readout time can be up to one frame period: 33 ms at 30 frames per second, 17 ms at 60. Many low-cost cameras use rolling shutters.
+
+<ShutterTimeline />
+
+Motion causes two separate problems. Only one of them depends on the shutter type:
+
+| Effect | Set by | Shutter | What it does |
+|:---|:---|:---|:---|
+| **Motion blur** | Exposure time | Both | Smears the tag. Too much blur and the detector can't find it at all ([§3.5](/docs/vision/apriltags#35-what-limits-detection)). |
+| **Rolling-shutter skew** | Readout time | Rolling only | Each row sees the robot at a different moment, so the tag is sheared. The tag is still found, but its corners are in the wrong places. |
+
+### 5.6.1 How big the effects are
+
+When the robot turns at a rate $\omega$ (radians per second), the whole image slides sideways at about $f \cdot \omega$ pixels per second. At 360°/s with $f = 914$ px, that is about 5,700 px/s.
+
+- **Motion blur** is that speed times the exposure time. A 2 ms exposure smears the tag by about 11 px. A 10 ms exposure smears it by 57 px, and the tag is lost.
+- **Skew** is that speed times the time it takes to read the tag's own rows. A tag that covers $h$ of the image's $H$ rows is read over $t_r \cdot h / H$, where $t_r$ is the readout time. At 3 m the tag is about 50 px tall. With a 20 ms readout its rows take 1.3 ms to read, and its top edge ends up about 7 px to the side of its bottom edge.
+
+Seven pixels sounds small next to the blur, but blur smears the tag evenly, while skew changes its shape. [§4.3](/docs/vision/pose-estimation#43-how-far-away-is-the-tag) showed that a tag's angle is measured from sub-pixel differences in its shape. A shear of several pixels overwhelms that signal. **The solver reads the sheared tag as a turned tag.** With the heading solved from the tag, the robot then swings around the tag, as in the [planar ambiguity](/docs/vision/pose-estimation#443-the-planar-ambiguity). The reprojection error stays low, so nothing looks wrong.
+
+### 5.6.2 Timestamps
+
+A rolling-shutter frame has no single capture time. A tag in the middle of the image is read about half a readout time after the frame starts. If the measurement is stamped with the start of the frame, the estimator compares it with odometry from the wrong moment. The robot has moved and turned in between. With the heading from the gyro, a heading that is off by $\omega \cdot \Delta t$ swings the robot sideways by about $d \cdot \omega \cdot \Delta t$ at distance $d$.
+
+Stamp each measurement with the moment the tag's center row was exposed: the frame start, plus $t_r \cdot v / H$ for a tag centered on row $v$, plus half the exposure time. This needs the camera's real readout time, from the sensor datasheet or measured.
+
+<RollingShutter />
+
+At the defaults (rolling shutter, 20 ms readout, 360°/s turn, tag at 3 m, 2 ms exposure):
+
+| Pipeline | Position error |
+|:---|:---|
+| Heading solved from the tag | about 1.2 m, with a 22° heading error |
+| Heading from the gyro, stamped at the frame start (9 ms early) | about 17 cm |
+| Heading from the gyro, stamped at the tag's center row | under 0.1 cm |
+| Global shutter, any of the above | under 0.1 cm |
+
+Things to try:
+
+- **Switch to a global shutter.** The skew and every pose error disappear. The blur stays, because it comes from the exposure time.
+- **Slow the turn to 90°/s.** The skew drops to about 2 px, but the heading solved from the tag is still about 11° off. Even gentle turns bias single-tag solves on a rolling shutter.
+- **Set the turn rate to 0 and drive sideways at 3 m/s.** Sideways driving moves the image much more slowly than turning, so the skew is only about 1 px. The heading solved from the tag is still off by about 8°.
+- **Shorten the readout time.** Halving it halves the skew and the timestamp error.
+- **Raise the exposure time.** The smear grows with either shutter. Short exposures need bright lighting or more gain.
+
+The widget leaves out noise, calibration error, and the effect of blur on the corners, and it uses a single tag. Tags at different heights in the image are read at different moments, so a multi-tag solve on a rolling shutter is also inconsistent while the robot moves. Solvers that model the robot's motion during the readout exist, but they need an accurate readout time. A global shutter avoids the problem.
+
+What to do:
+
+1. **Prefer a global shutter** for every camera used for pose estimation.
+2. **Keep the exposure short.** A few milliseconds or less, with enough light or gain for a clean image. This matters for both shutter types.
+3. **Take the heading from the gyro** for single-tag solves. It removes most of the skew error, just as it removes most of the ambiguity (see [§4.5](/docs/vision/pose-estimation#45-many-tags-one-solve)).
+4. **Timestamp at the tag's rows**, as described in [§5.6.2](#562-timestamps).
+5. **Trust measurements less while turning.** Raise the standard deviations with the turn rate, or skip tag measurements above a turn rate you pick from logged data.

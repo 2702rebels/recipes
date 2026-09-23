@@ -1,4 +1,4 @@
-import { BookOpen, Gauge, GraduationCap } from "lucide-react";
+import { BookOpen, Camera, Gauge, GraduationCap } from "lucide-react";
 import Link from "next/link";
 
 import type { ReactNode } from "react";
@@ -15,6 +15,12 @@ const SECTIONS: { title: string; href: string; description: string; icon: ReactN
     href: "/docs/controls/ctre",
     description: "Closed-loop tuning for every common mechanism, in Volts and Amps, with interactive explorers.",
     icon: <Gauge className="size-5" />,
+  },
+  {
+    title: "Vision",
+    href: "/docs/vision",
+    description: "How a robot finds itself on the field with a camera: AprilTags, PnP solving, and calibration.",
+    icon: <Camera className="size-5" />,
   },
   {
     title: "Training",
@@ -55,7 +61,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {SECTIONS.map((s) => (
           <Link
             key={s.href}

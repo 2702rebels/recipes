@@ -1,0 +1,57 @@
+---
+title: Vision
+description: Foundations of camera-based localization in FRC. Why vision matters, relative and global positioning, AprilTags, the math of pose estimation, and camera calibration.
+---
+
+This section explains how a robot uses a camera to find where it is on the field. It covers the ideas every vision system is built on, whatever software runs it. How our own vision pipeline puts these ideas into practice is covered separately.
+
+<Callout title="What you need">
+  High-school algebra and trigonometry. Vectors and matrices help on the pose estimation page, but each step is
+  explained. Every page has interactive widgets. Move the sliders and watch what changes.
+</Callout>
+
+## Where to start
+
+Read the pages in order. Each one builds on the one before.
+
+<Cards>
+  <Card
+    title="1. Why Vision"
+    href="/docs/vision/localization"
+    description="Odometry drifts. Vision doesn't. Why robots combine the two, with a drift simulator."
+  />
+  <Card
+    title="2. Relative vs. Global Positioning"
+    href="/docs/vision/positioning"
+    description="Measuring against one tag, or tracking the robot's pose on the whole field. Pros, cons, and when to use each."
+  />
+  <Card
+    title="3. AprilTags"
+    href="/docs/vision/apriltags"
+    description="What a tag is, how a detector finds one, and how FRC places them on the field."
+  />
+  <Card
+    title="4. Pose Estimation"
+    href="/docs/vision/pose-estimation"
+    description="Coordinate frames, the pinhole camera, PnP solving, the single-tag ambiguity, and multi-tag solves."
+  />
+  <Card
+    title="5. Camera Calibration"
+    href="/docs/vision/calibration"
+    description="Why every camera needs calibrating, how calibration errors turn into pose errors, how to calibrate well, and rolling vs. global shutters."
+  />
+</Cards>
+
+## Key ideas at a glance
+
+| Idea | One-line summary | Page |
+|:---|:---|:---|
+| Odometry drifts | Wheel and gyro errors add up and never correct themselves. | [Why Vision](/docs/vision/localization#12-odometry-fast-smooth-and-drifting) |
+| Vision is absolute | Each measurement is made against fixed landmarks, so errors don't pile up. | [Why Vision](/docs/vision/localization#13-vision-absolute-but-noisy) |
+| Fuse them | Odometry for smooth, fast updates. Vision to pull the estimate back to the truth. | [Why Vision](/docs/vision/localization#14-fusing-odometry-and-vision) |
+| Relative vs. global | Relative ignores field layout errors. Global works with any tag and fills gaps with odometry. | [Positioning](/docs/vision/positioning#25-choosing-an-approach) |
+| Error grows with distance squared | A tag half as big in the image gives four times the range error. | [Pose Estimation](/docs/vision/pose-estimation#43-how-far-away-is-the-tag) |
+| One tag, two answers | A single tag's orientation is weak, and a second, wrong pose fits almost as well. | [Pose Estimation](/docs/vision/pose-estimation#443-the-planar-ambiguity) |
+| More tags, one solve | Solve over all visible corners at once. | [Pose Estimation](/docs/vision/pose-estimation#45-many-tags-one-solve) |
+| Calibrate every camera | A 3% focal length error is a 3% range error, at every distance. | [Calibration](/docs/vision/calibration#53-how-calibration-errors-become-pose-errors) |
+| Rolling shutters shear tags | A turning robot makes a rolling-shutter tag look turned. Use a global shutter, or the gyro heading and per-row timestamps. | [Calibration](/docs/vision/calibration#56-rolling-vs-global-shutter) |

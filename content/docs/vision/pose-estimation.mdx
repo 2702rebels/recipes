@@ -1,0 +1,278 @@
+---
+title: Pose Estimation
+description: How four tag corners become a robot pose. Coordinate frames and transforms, the pinhole camera, why error grows with distance squared, PnP solving, the single-tag ambiguity, and multi-tag solves.
+---
+
+This page follows one camera frame from pixels to a robot pose on the field. In short:
+
+1. **The detector gives pixel coordinates** of each tag's four corners.
+2. **The field layout gives the 3D positions** of those same corners.
+3. **A PnP solver finds the camera pose** that makes the 3D corners land on the observed pixels.
+4. **Known transforms convert** the camera pose into the robot's pose on the field.
+
+The sections below explain each step, and where the errors come from. The widgets run a real solver (the same kind of math any vision system uses) in your browser.
+
+## 4.1 Poses, frames, and transforms
+
+A **frame** is an origin plus three axes. A **pose** is the position and orientation of one frame, measured in another. On the field a 2D pose ($x$, $y$, $\theta$) is often enough, but the camera math is 3D: three position numbers and three rotation angles (roll, pitch, yaw).
+
+The frames used here:
+
+| Frame | Origin | Axes |
+|:---|:---|:---|
+| **F**, field | Right-hand corner of the blue alliance wall (from the blue driver stations) | $+x$ toward red, $+y$ left, $+z$ up |
+| **R**, robot | Center of the robot, on the floor | $+x$ forward, $+y$ left, $+z$ up |
+| **C**, camera | Center of the lens | $+x$ right, $+y$ **down**, $+z$ forward (out of the lens) |
+| **A**, tag | Center of the tag | $+x$ out of the tag face (WPILib convention) |
+
+The camera frame follows the computer vision convention (OpenCV), which is different from WPILib's. This is a common source of bugs. Converting a point from camera axes to robot-style axes (forward, left, up) is:
+
+$$
+\begin{bmatrix} x_{\text{fwd}} \\ y_{\text{left}} \\ z_{\text{up}} \end{bmatrix} =
+\begin{bmatrix} 0 & 0 & 1 \\ -1 & 0 & 0 \\ 0 & -1 & 0 \end{bmatrix}
+\begin{bmatrix} x_{\text{cam}} \\ y_{\text{cam}} \\ z_{\text{cam}} \end{bmatrix}
+$$
+
+### 4.1.1 Transforms
+
+A **transform** ${}^{A}T_{B}$ describes frame B's pose in frame A. It converts a point written in B's coordinates into A's coordinates. It holds a rotation matrix $R$ (3×3) and a translation $t$ (3×1), and is usually written as one 4×4 matrix:
+
+$$
+{}^{A}T_{B} = \begin{bmatrix} R & t \\ 0\;0\;0 & 1 \end{bmatrix}, \qquad p_A = R\,p_B + t
+$$
+
+Transforms chain by multiplying, with inner frames canceling: ${}^{A}T_{C} = {}^{A}T_{B}\,{}^{B}T_{C}$. The inverse swaps the frames: $\left({}^{A}T_{B}\right)^{-1} = {}^{B}T_{A}$.
+
+### 4.1.2 The chain from camera to field
+
+<FrameChain />
+
+Three transforms link the robot to a tag. Two are known ahead of time, and one is measured:
+
+- ${}^{F}T_{A}$, the tag's pose on the field, from the [field layout](/docs/vision/apriltags#34-tags-on-the-frc-field).
+- ${}^{R}T_{C}$, the camera's pose on the robot: the **mount**, measured from CAD and checked on the robot (see [§5.5](/docs/vision/calibration#55-extrinsics-where-the-camera-is-on-the-robot)).
+- ${}^{C}T_{A}$, the tag's pose seen from the camera, **measured every frame** by the solver.
+
+Going around the loop, field to tag equals field to robot to camera to tag: ${}^{F}T_{A} = {}^{F}T_{R}\,{}^{R}T_{C}\,{}^{C}T_{A}$. Solving for the robot:
+
+$$
+{}^{F}T_{R} = {}^{F}T_{A}\,\left({}^{C}T_{A}\right)^{-1}\,\left({}^{R}T_{C}\right)^{-1}
+$$
+
+An error in any of the three terms moves the result. The layout and mount errors are fixed biases. The measured term carries the noise.
+
+## 4.2 The pinhole camera
+
+A camera maps 3D points to 2D pixels. The **pinhole model** describes this with a few numbers, and works well for most lenses once distortion is removed (see [Calibration](/docs/vision/calibration)).
+
+<PinholeDiagram />
+
+Light from a point $P$ travels in a straight line through the pinhole to the image plane. Similar triangles give its image position. For a point $(X, Y, Z)$ in camera coordinates:
+
+$$
+u = f_x \frac{X}{Z} + c_x, \qquad v = f_y \frac{Y}{Z} + c_y
+$$
+
+Where:
+- $(u, v)$ is the pixel position, from the top-left corner of the image
+- $f_x$, $f_y$ are the **focal lengths in pixels**, horizontal and vertical (nearly equal on most cameras)
+- $(c_x, c_y)$ is the **principal point**: where the optical axis hits the sensor, near the image center
+- $Z$ is the depth, along the optical axis
+
+The four numbers $f_x$, $f_y$, $c_x$, and $c_y$ are the camera's **intrinsics**. They are collected in the matrix $K$, and the whole projection from a point in any frame is written:
+
+$$
+s \begin{bmatrix} u \\ v \\ 1 \end{bmatrix} = K \,\big[\, R \mid t \,\big] \begin{bmatrix} X \\ Y \\ Z \\ 1 \end{bmatrix}, \qquad
+K = \begin{bmatrix} f_x & 0 & c_x \\ 0 & f_y & c_y \\ 0 & 0 & 1 \end{bmatrix}
+$$
+
+Here $[R \mid t]$ moves the point into the camera frame, $K$ turns it into pixels, and $s$ is the depth $Z$ that gets divided out.
+
+The focal length in pixels follows from the field of view: $f_x = \dfrac{W/2}{\tan(\text{HFOV}/2)}$ for an image $W$ pixels wide. The examples on these pages use a 1280×800 camera with a 70° horizontal field of view:
+
+$$
+f_x = \frac{640}{\tan 35^\circ} \approx 914 \text{ px}
+$$
+
+**Depth is lost.** Every point on the ray through a pixel lands on that same pixel. One pixel tells you a direction, not a distance. To get distance you need to know the size of something in the scene, and that is what the tag's known size provides.
+
+## 4.3 How far away is the tag?
+
+A quick estimate, done by hand without a solver, shows where the errors come from. A tag of size $s$ at distance $Z$, facing the camera, appears $w$ pixels wide:
+
+$$
+w = \frac{f\,s}{Z} \qquad \Longrightarrow \qquad Z = \frac{f\,s}{w}
+$$
+
+**Range error grows with distance squared.** Differentiate $Z$ with respect to $w$ to see how much a one-pixel mistake in the width moves the distance:
+
+$$
+\left|\frac{dZ}{dw}\right| = \frac{f\,s}{w^2} = \frac{Z^2}{f\,s}
+$$
+
+With $f = 914$ px and $s = 0.1651$ m:
+
+| Distance | Tag width | Range error per pixel of width |
+|:---|:---|:---|
+| 2 m | 75 px | 2.7 cm |
+| 4 m | 38 px | 11 cm |
+| 6 m | 25 px | 24 cm |
+
+Double the distance and the error goes up four times. This is why vision measurements should be trusted less at distance, and why standard deviations are often scaled with distance squared (see [§4.6](#46-from-solution-to-robot-pose)).
+
+**Orientation is much weaker than range.** When a tag turns by an angle $\theta$ away from facing the camera, its width shrinks by $\cos\theta$. For small angles that barely changes anything, because $\cos\theta \approx 1 - \theta^2/2$. The first-order signal is perspective. The near edge of the tag gets a little taller in the image and the far edge a little shorter. The difference in edge heights is:
+
+$$
+\Delta h \approx \frac{f\,s^2 \sin\theta}{Z^2}
+$$
+
+At 4 m, turning the tag by 10° changes $\Delta h$ by only about **0.27 px**. Corner noise is often half a pixel or more. So from one tag, the camera can tell *where* the tag is quite well, but not which way it faces.
+
+<PinholeExplorer />
+
+Things to try:
+
+- **Watch the tag width** as you move from 1 m to 7 m. The "range change for 1 px" readout grows with distance squared.
+- **Turn the tag** and watch how little its shape changes when it's far away.
+- **Look at the top-down view.** The second solution puts the camera in a very different place, yet its corners (dashed) sit almost on top of the real ones. At 4 m the difference is only a fraction of a pixel. [§4.4.3](#443-the-planar-ambiguity) explains this.
+- **Narrow the field of view.** A longer focal length makes the tag bigger in the image and every error smaller, at the cost of seeing less of the field.
+
+## 4.4 The Perspective-n-Point problem
+
+**PnP** is the problem of finding a camera's pose from $n$ points whose 3D positions are known, given where they appear in the image and the camera's intrinsics $K$.
+
+The pose has six unknowns (three for position, three for rotation). Each point gives two equations (its $u$ and its $v$). So:
+
+- **3 points** give 6 equations, just enough. This case (P3P) has up to four valid solutions.
+- **4 or more points** usually pin down one solution. A tag provides exactly 4.
+
+Noise means no pose fits every point exactly. Solvers therefore minimize the **reprojection error**: project the known 3D points with a candidate pose, and add up the squared pixel distances to where they were observed:
+
+$$
+E(R, t) = \sum_{i=1}^{n} \left\| \mathbf{u}_i - \pi\big(K,\; R\,\mathbf{X}_i + t\big) \right\|^2
+$$
+
+Where:
+- $\mathbf{X}_i$ is the known 3D position of point $i$ (a tag corner)
+- $\mathbf{u}_i$ is where the detector found it in the image, in pixels
+- $\pi$ is the pinhole projection from [§4.2](#42-the-pinhole-camera), including lens distortion
+- $R$ and $t$ are the candidate camera pose
+
+This is a nonlinear problem, so solvers work in two stages: a quick closed-form **initial guess**, then **iterative refinement**.
+
+### 4.4.1 Initial guess from a homography
+
+A tag's corners all lie on one plane. Put the tag's own frame on that plane, so every corner has $Z_{\text{tag}} = 0$. The projection then loses its third column:
+
+$$
+s \begin{bmatrix} x \\ y \\ 1 \end{bmatrix} = \big[\, r_1 \;\; r_2 \;\; r_3 \;\; t \,\big] \begin{bmatrix} X \\ Y \\ 0 \\ 1 \end{bmatrix} = \big[\, r_1 \;\; r_2 \;\; t \,\big] \begin{bmatrix} X \\ Y \\ 1 \end{bmatrix} = H \begin{bmatrix} X \\ Y \\ 1 \end{bmatrix}
+$$
+
+Here $(x, y)$ are **normalized** image coordinates: pixels with $K$ removed, $x = (u - c_x)/f_x$ and $y = (v - c_y)/f_y$. The columns $r_1, r_2, r_3$ are the columns of $R$.
+
+The 3×3 matrix $H$ is a **homography**: a map from one plane (the tag) to another (the image). It is only defined up to scale, so it has 8 unknowns. Each corner gives two linear equations. Dividing out $s$:
+
+$$
+x\,(h_{31}X + h_{32}Y + h_{33}) = h_{11}X + h_{12}Y + h_{13}
+$$
+
+$$
+y\,(h_{31}X + h_{32}Y + h_{33}) = h_{21}X + h_{22}Y + h_{23}
+$$
+
+Four corners give 8 equations for 8 unknowns (set $h_{33} = 1$), a plain linear system. This is the **direct linear transform** (DLT). Then read the pose out of $H$:
+
+1. **Find the scale.** $r_1$ and $r_2$ must be unit vectors, so $\lambda = 2 / (\lVert h_1 \rVert + \lVert h_2 \rVert)$, where $h_1, h_2, h_3$ are the columns of $H$.
+2. **Get two rotation axes.** $r_1 = \lambda h_1$ and $r_2 = \lambda h_2$.
+3. **Get the third.** $r_3 = r_1 \times r_2$, perpendicular to both.
+4. **Get the translation.** $t = \lambda h_3$: the tag's center in camera coordinates.
+5. **Clean up $R$.** With noise, $[r_1\; r_2\; r_3]$ is not quite a rotation. Replace it with the nearest true rotation matrix.
+
+### 4.4.2 Refinement: minimizing reprojection error
+
+The homography guess is close but not the best fit, because it minimizes an algebraic error, not the pixel error. The **Levenberg–Marquardt** method improves it step by step:
+
+1. **Linearize.** Stack all the pixel residuals in a vector $\mathbf{r}$. Near the current pose, a small change $\delta$ (three rotation numbers and three position numbers) changes them by about $J\,\delta$, where $J$ is the Jacobian: how much each residual moves per unit of each pose parameter.
+2. **Solve for the step.**
+
+   $$
+   \left(J^\top J + \mu\,\operatorname{diag}(J^\top J)\right)\delta = -J^\top \mathbf{r}
+   $$
+
+3. **Accept or retry.** If the step lowers $E$, keep it and make $\mu$ smaller (bolder steps, like Newton's method). If not, make $\mu$ larger (smaller, safer steps, like gradient descent) and try again.
+4. **Repeat** until $E$ stops improving. From a good start this takes a handful of iterations.
+
+Rotations are updated with a small rotation vector $\omega$, as $R \leftarrow \exp([\omega]_\times)\,R$, so the result is always a valid rotation.
+
+The widgets on these pages use exactly these two stages (`lib/vision.ts` in this site's source).
+
+### 4.4.3 The planar ambiguity
+
+For a small, flat target, the reprojection error often has **two minima**: the true pose, and a second pose where the tag is turned the other way relative to the line of sight. [§4.3](#43-how-far-away-is-the-tag) showed why: the only first-order clue to the tag's angle is a sub-pixel difference in edge heights, and noise can flip it.
+
+The two solutions don't just differ in the tag's angle. Seen from the tag, the camera **swings around it**, so the two camera positions can be meters apart. In the widget above, at 3 m with the tag turned 20°, the second solution is only about 0.5 px worse and moves the camera about 2 m sideways.
+
+A solver that knows about this returns both solutions and their errors. The **ambiguity ratio** compares them:
+
+$$
+\text{ambiguity} = \frac{E_{\text{best}}}{E_{\text{second}}}
+$$
+
+A ratio near 0 means the best solution is clearly better. A ratio near 1 means the two can't be told apart. A common rule of thumb is to reject single-tag solves with a ratio above about 0.2. IPPE (Infinitesimal Plane-based Pose Estimation) is a solver built for planar targets that returns both solutions directly. OpenCV includes it as `SOLVEPNP_IPPE_SQUARE` for square markers.
+
+Other ways to pick the right solution:
+
+- **Compare with the gyro.** Keep the solution whose heading agrees with the robot's gyro heading.
+- **Compare with the current estimate.** Keep the solution closer to where the pose estimator already thinks the robot is.
+- **Use more than one tag.** Corners that are not all on one plane have only one solution.
+
+## 4.5 Many tags, one solve
+
+When several tags are visible, put **all of their corners into a single PnP solve**. Use the field layout to write each corner in field coordinates. The solver then returns the camera's pose on the field, ${}^{F}T_{C}$, directly.
+
+This beats solving each tag separately and averaging:
+
+- **More points average out noise.** Eight corners instead of four.
+- **A wider spread measures angles better.** Points 0.6 m apart give far more angle information than points 0.17 m apart.
+- **No ambiguity.** Tags on different planes (two faces of a structure, or tags at different heights) can't be fit by a mirrored pose.
+
+A multi-tag solve still has a weakness: it trusts the layout. If one tag is off, the solve is biased (see [§2.3](/docs/vision/positioning#23-field-layout-errors-bias-vs-spread)).
+
+**The gyro fixes most single-tag problems.** A single tag gives a good position of the tag in the camera frame, and a poor orientation. The robot's field position is found by going back from the tag along that measurement, so an orientation error $\delta\theta$ swings the robot sideways by about $d \cdot \delta\theta$ at distance $d$. If the heading comes from the gyro instead, only the good part of the measurement is used.
+
+<PoseScatter />
+
+At the defaults (one tag at 3 m, turned 15°, 0.5 px noise):
+
+| Setup | Range error (RMS) | Sideways error (RMS) |
+|:---|:---|:---|
+| One tag, heading solved | 20 cm | 71 cm |
+| One tag, heading from gyro | 2 cm | under 0.1 cm |
+| Two tags on angled faces, heading solved | 1.3 cm | 4.7 cm |
+| Two tags on angled faces, heading from gyro | 0.6 cm | under 0.1 cm |
+
+The large single-tag error is mostly the ambiguity. Most solves land near the truth, but some pick the second solution meters away. Those outliers are what an estimator must reject.
+
+Things to try:
+
+- **One tag, heading solved.** Move the tag angle to 0°. The errors don't go away. A head-on tag is the hardest case, because noise alone decides which way the solver thinks it is turned.
+- **Switch to gyro heading.** The sideways spread almost disappears. What's left is mostly range error, which grows with distance squared.
+- **Two tags, same face vs. angled faces.** Both are much better than one. Angled faces remove the ambiguity more reliably, especially at large tag angles.
+- **Raise the noise to 2 px.** Every error grows, and the single-tag flips become much more common.
+
+The widget's noise is ideal: independent and Gaussian. Real corner errors also come from motion blur, [rolling shutter](/docs/vision/calibration#56-rolling-vs-global-shutter), and calibration errors, which are not random and don't average out.
+
+## 4.6 From solution to robot pose
+
+A practical pipeline, from one camera frame to the pose estimator:
+
+1. **Detect.** Find tags, and drop detections with bit corrections or a low decision margin (see [§3.3](/docs/vision/apriltags#33-how-a-detector-finds-tags)).
+2. **Solve.** With two or more tags, solve over all corners at once. With one tag, solve and keep both solutions, and reject it if the ambiguity is high, or pick the solution that matches the gyro.
+3. **Chain the transforms.** Apply the camera mount to get ${}^{F}T_{R}$ (see [§4.1.2](#412-the-chain-from-camera-to-field)).
+4. **Sanity-check the result.** Reject poses outside the field, poses well above or below the floor, poses with large roll or pitch (the robot is flat on the floor), and poses that are too far from the tags to be trusted.
+5. **Set the standard deviations.** Scale them with the square of the distance to the tags, and shrink them as more tags are used. A common starting point is $\sigma_{xy} = \sigma_0 \cdot \bar{d}^{\,2} / n$, where $\bar{d}$ is the average tag distance and $n$ the number of tags. Tune $\sigma_0$ on the robot. Give heading a large standard deviation unless several tags were used.
+6. **Add the measurement with its capture time.** The estimator applies it at that moment and replays odometry since then (see [§1.4](/docs/vision/localization#14-fusing-odometry-and-vision)).
+
+The formula in step 5 is a heuristic, not a law. It follows from [§4.3](#43-how-far-away-is-the-tag), but it ignores the tag angle, the ambiguity, and calibration errors. Check it against logged data from your robot.
+
+Every step here assumes the intrinsics $K$ and the lens distortion are right. [Camera Calibration](/docs/vision/calibration) covers what happens when they aren't.

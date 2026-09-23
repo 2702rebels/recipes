@@ -1,0 +1,114 @@
+---
+title: Relative vs. Global Positioning
+description: Positioning against one or two tags, or tracking the robot's pose on the whole field. How each works, their pros and cons, and when to use which.
+---
+
+A camera sees a tag. There are two ways to use that measurement:
+
+- **Relative positioning** answers "where is the target, relative to me?" The robot measures the tag and places the target from it. It never needs to know where it is on the field.
+- **Global positioning** answers "where am I on the field?" The robot turns every tag it sees into a field pose, blends it with odometry, and looks up targets in field coordinates.
+
+<RelativeGlobalDiagram />
+
+Both use the same camera math (see [Pose Estimation](/docs/vision/pose-estimation)). They differ in the frame of reference they use and in what can go wrong.
+
+## 2.1 Relative positioning
+
+The robot measures the transform from its camera to one tag. The target is defined as a fixed offset from that tag, for example "0.5 m straight out from the tag face". The target position relative to the robot is then:
+
+$$
+\text{target in robot frame} = (\text{robot} \to \text{camera}) \cdot (\text{camera} \to \text{tag}) \cdot (\text{tag} \to \text{target})
+$$
+
+The first transform is the camera mount, measured once. The second is measured every frame. The third is a constant you choose. There is no field layout and no odometry in this chain.
+
+Simpler relative methods skip the full pose. For example, turn until the tag is centered in the image, then drive until it is a set size. These work for the same reasons and have the same limits.
+
+**Pros**
+
+- **No field layout needed.** If the target is on the same structure as the tag, the robot measures the thing it cares about directly. A field element that was built a few centimeters off doesn't matter.
+- **Gets more accurate as you get closer.** Error grows with distance squared, so the final approach is the most precise part.
+- **Simple.** No estimator, no standard deviations to tune, and fewer ways to go wrong.
+
+**Cons**
+
+- **Only works while that tag is in view.** Up close, the tag can leave the camera's view or be blocked by a game piece, just when precision matters most.
+- **One tag gives a weak orientation.** A single tag's angle is poorly measured, and it has a [second, wrong solution](/docs/vision/pose-estimation#443-the-planar-ambiguity). With a target offset from the tag, an angle error becomes a position error at the target.
+- **No big picture.** The robot can't plan a path from across the field, aim at targets without tags, or keep going when the tag disappears.
+- **Jumps between tags.** Switching from one tag to another changes the reference, and the target can jump.
+
+## 2.2 Global positioning
+
+The robot keeps its pose in field coordinates, using a pose estimator that blends odometry and vision (see [§1.4](/docs/vision/localization#14-fusing-odometry-and-vision)). Each vision measurement uses the **field layout**: a file that lists the 3D pose of every tag on the field. With the layout, tag corners become known points in field coordinates, and a solve gives the camera's pose on the field directly.
+
+WPILib ships each season's layout as `AprilTagFieldLayout` (for example `AprilTagFields.kDefaultField`). For 2025 and 2026 there are two layouts, one for welded fields and one for AndyMark fields, because the two field builds put tags in slightly different places. Use the one that matches the field you play on.
+
+**Pros**
+
+- **Any tag helps.** Every tag in view adds information, and [solving over several tags](/docs/vision/pose-estimation#45-many-tags-one-solve) at once is far more accurate than one.
+- **Odometry fills the gaps.** When no tag is in view, the pose keeps updating from odometry until vision returns.
+- **One pose for everything.** Path following, auto-aim, auto-align, and logging all use the same pose. Targets without tags (a spot on the floor, a goal far away) are just field coordinates.
+
+**Cons**
+
+- **Depends on the layout matching the real field.** If a tag is a few centimeters off from where the layout says, every measurement from it is biased. The next section shows how much.
+- **Camera mount errors bias everything.** A camera mounted 1° off from where the code says rotates every measurement (see [§5.5](/docs/vision/calibration#55-extrinsics-where-the-camera-is-on-the-robot)).
+- **More to tune.** Standard deviations, outlier rejection, and latency compensation all have to be right.
+- **A bad measurement pulls the whole pose.** One wrong solve fed into the estimator affects every system that uses the pose, so filtering matters.
+
+## 2.3 Field layout errors: bias vs. spread
+
+Real fields are assembled at each event, and a tag can be a few centimeters from its layout position. The widget below puts the target tag slightly off from the layout, and compares the two approaches over 300 noisy solves.
+
+- **Relative** solves against the target tag only, and places the scoring point from it.
+- **Global** solves against the target tag and a second, correctly placed tag, using the field layout and the gyro heading. The scoring point comes from the layout.
+
+<RelativeVsGlobal />
+
+The zoomed view marks two points:
+
+- **The true scoring point** is 0.5 m out from where the target tag really is. This is where the robot should go.
+- **The layout scoring point** is 0.5 m out from where the field layout says the tag is. A robot that knew its field pose perfectly would go here, because it looks the target up in the layout. With a 3 cm shift, this point is 3 cm to the side.
+
+At the defaults (3 m away, target tag shifted 3 cm, 0.5 px corner noise):
+
+| | Bias | Spread (RMS) |
+|:---|:---|:---|
+| **Relative** | about 2 cm | about 7 cm |
+| **Global** | about 10 cm | under 1 cm |
+
+**Relative is not affected by the shift.** Its small bias comes from the single-tag angle error, not the layout. Its spread is larger, because one tag's orientation is weak and the scoring point is 0.5 m from the tag.
+
+**Global is precise but wrong.** Two tags and a known heading make the solve very steady. But the solver trusts the layout, so it is steadily wrong. It lands at neither marked point, because the layout error enters twice:
+
+1. **The target comes from the layout.** That alone would put the robot at the layout scoring point, 3 cm to the side.
+2. **The robot's own pose is off too.** The two tags disagree with the layout, and the solver finds the pose that fits them best. A multi-tag solve uses the distance between tags like a ruler. The target tag moved 3 cm relative to the other tag, so the ruler is off by about 4%, and so is the range: roughly 10 cm at this distance.
+
+Here the sideways part of the pose error cancels the 3 cm sideways error from the lookup, and the range error is left. The bias ends up **larger than the shift itself**.
+
+Things to try:
+
+- **Set the shift to 0.** Global has almost no bias and much less spread than relative. With a correct layout, global wins.
+- **Move closer.** Both errors shrink. Relative's spread drops fastest.
+- **Add twist instead of shift.** Set the shift to 0 and the twist to 2°. The global cloud now lands right on the layout scoring point, about 1.7 cm to the side. The tag's center didn't move, so the pose is still right, and only the target lookup is off.
+
+## 2.4 Hybrids
+
+Most teams don't pick just one:
+
+- **Global everywhere, relative for the last meter.** Drive with the global pose, then switch to a relative measurement of the target tag for final alignment.
+- **Global with local trust.** Near a scoring location, give the tags on that structure more weight (smaller standard deviations) than distant tags.
+- **Relative with a gyro.** Use the gyro heading instead of the tag's angle in a relative measurement. This removes most of the single-tag noise, but a twisted tag now causes a heading error again.
+
+## 2.5 Choosing an approach
+
+| Situation | Use | Why |
+|:---|:---|:---|
+| Autonomous paths across the field | Global | Needs a field pose, and odometry covers gaps between tags |
+| Aiming at a target with no tag on it | Global | The target only exists as field coordinates |
+| Final alignment to a structure with its own tag | Relative, or global with local trust | Removes layout errors where precision matters most |
+| Field layout doubtful (practice field, damaged field) | Relative | Doesn't depend on the layout |
+| Many tags in view at once | Global | Multi-tag solves are accurate and have no ambiguity |
+| Only one distant tag in view | Global, with a large standard deviation, or ignore it | A single far tag is noisy and ambiguous |
+
+Next, [AprilTags](/docs/vision/apriltags) explains what the camera is actually looking at.

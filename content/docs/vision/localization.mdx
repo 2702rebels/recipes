@@ -1,0 +1,101 @@
+---
+title: Why Vision
+description: Why robots need vision for localization. Odometry drifts, vision measurements don't, and a pose estimator combines the two.
+---
+
+**Localization** means knowing the robot's **pose**: where it is on the field and which way it faces. On a flat field, a pose is three numbers: $x$ and $y$ in meters and a heading $\theta$. Almost every advanced feature depends on it:
+
+- **Autonomous paths.** A path is a list of field positions. The robot can only follow it if it knows where it is.
+- **Auto-aim.** To aim at a goal, the robot needs the distance and direction from itself to the goal.
+- **Auto-align.** Lining up with a scoring location is a small path from where the robot is to where it should be.
+- **Field-relative driving.** "Push the stick forward to drive away from the driver" needs the robot's heading.
+
+A robot has two ways to track its pose: by counting how far it has moved (**odometry**), and by looking at landmarks it knows the position of (**vision**). This page explains why you need both.
+
+## 1.1 The short version
+
+| | Odometry | Vision |
+|:---|:---|:---|
+| **Measures** | How far the robot moved since the last update | Where the robot is, against fixed landmarks |
+| **Update rate** | Every robot loop (50 Hz or faster) | Every camera frame (tens of Hz), only when tags are in view |
+| **Short-term noise** | Very low. Smooth. | Higher. Grows quickly with distance. |
+| **Long-term error** | Grows without limit | Does not grow |
+| **Fails when** | Wheels slip, the robot is pushed, it drives over bumps | No tag in view, motion blur, tags too far or at steep angles |
+
+The two fail in opposite ways, so they fix each other. A **pose estimator** blends them into one pose that is both smooth and accurate.
+
+## 1.2 Odometry: fast, smooth, and drifting
+
+Odometry adds up small movements. Every loop, the robot reads its wheel encoders and gyro, works out how far it moved since the last loop, and adds that to its pose. This is also called **dead reckoning**.
+
+Each small step has a small error, and the errors add up. Nothing in odometry ever measures the absolute position, so nothing pulls the estimate back. The error only grows.
+
+| Error source | What happens | How it grows |
+|:---|:---|:---|
+| **Wheel diameter** | Tread wears down, or the diameter in code is slightly wrong. Every distance is off by the same percentage. | With distance driven |
+| **Wheel slip** | Hard acceleration, carpet seams, or pushing matches. The wheels turn but the robot doesn't move as far, or it moves while the wheels don't. | With every slip. Often in big jumps. |
+| **Gyro drift** | The heading slowly wanders. Every step is then added in a slightly wrong direction. | With distance, and faster over time |
+| **Collisions** | Another robot shoves yours. Odometry doesn't see the movement at all. | One jump per hit |
+
+In a quiet autonomous period, odometry is usually good enough to follow a path. Contact is what ruins it. In a pushing match the wheels spin while the robot stays put, or the robot is shoved sideways while the wheels barely turn, and every slip adds a jump that is never taken back. After a match with defense, odometry alone can be off by several meters. That is enough to put the robot's estimate outside the field.
+
+## 1.3 Vision: absolute, but noisy
+
+A camera that recognizes a landmark at a known position can work out where the robot is **right now**. It doesn't depend on the robot's history. A vision measurement made after a collision is just as good as one made before it. This is what "absolute" means: the error does not build up.
+
+FRC fields have **AprilTags** for this: printed square markers at known positions, each with its own ID. The [AprilTags page](/docs/vision/apriltags) explains them.
+
+Vision has its own problems:
+
+- **Noise grows fast with distance.** A tag twice as far away looks half as big, and the position error grows about four times. The [pose estimation page](/docs/vision/pose-estimation#43-how-far-away-is-the-tag) shows why.
+- **Tags aren't always in view.** The camera sees only what it points at, and robots and game pieces block the view.
+- **Measurements arrive late.** Capturing and processing an image takes time. A robot moving at 4 m/s travels 20 cm in 50 ms. The measurement describes where the robot *was*.
+- **Some measurements are just wrong.** Motion blur, glare, a tag seen at a steep angle, or the [single-tag ambiguity](/docs/vision/pose-estimation#443-the-planar-ambiguity) can produce a pose that is far off. These have to be caught and thrown out.
+
+## 1.4 Fusing odometry and vision
+
+A pose estimator keeps one best guess of the pose and updates it two ways:
+
+1. **Predict with odometry.** Every loop, move the estimate by what odometry measured. The estimator's uncertainty grows a little with each step.
+2. **Correct with vision.** When a vision measurement arrives, nudge the estimate toward it. How far depends on how much each side is trusted.
+
+The trust is set with **standard deviations**: how far off a measurement typically is, in meters for position and radians for heading. A small standard deviation means "trust this a lot". For a single number, a Kalman filter works out the right blend like this:
+
+$$
+\hat{x} \leftarrow \hat{x} + K\,(z - \hat{x}), \qquad K = \frac{\sigma_{\text{est}}^2}{\sigma_{\text{est}}^2 + \sigma_{\text{vision}}^2}
+$$
+
+Where:
+- $\hat{x}$ is the estimate and $z$ is the vision measurement
+- $\sigma_{\text{est}}$ is the estimator's current uncertainty, which grows as odometry runs
+- $\sigma_{\text{vision}}$ is the measurement's uncertainty, which grows with distance to the tag
+- $K$ is the **gain**, between 0 (ignore the measurement) and 1 (jump to it)
+
+Right after a good measurement, $\sigma_{\text{est}}$ is small, so the next measurement moves the estimate only a little. After a long stretch without tags, $\sigma_{\text{est}}$ has grown, and the first new measurement moves the estimate a lot.
+
+Two details matter in practice:
+
+- **Heading usually comes from the gyro.** A gyro measures heading very well over the length of a match. Vision heading from a single tag is poor (see [§4.5](/docs/vision/pose-estimation#45-many-tags-one-solve)). Many teams give vision a very large heading standard deviation, so it corrects only $x$ and $y$.
+- **Latency compensation.** The estimator keeps a short history of odometry. When a measurement arrives, it is applied at the time the image was captured, and the odometry since then is replayed on top. Without this, a moving robot is pulled toward where it used to be.
+
+WPILib's pose estimators (such as `SwerveDrivePoseEstimator`) do both. `addVisionMeasurement(pose, timestamp, stdDevs)` takes the vision pose, the capture time, and the standard deviations.
+
+## 1.5 Try it: one match of driving
+
+The widget below drives a robot around a figure-eight for a full 150-second match. Odometry has a wheel diameter error, gyro drift, and random collisions that make the wheels slip by 0.2 to 1 m each. The robot has a camera on its front and back. When a tag is in view, the vision measurement goes into a simple Kalman filter like the one above.
+
+<OdometryDrift />
+
+Things to try:
+
+- **Turn vision off.** Odometry error jumps at every collision and is never corrected. With the default three collisions per minute it ends the match meters off, and the dashed path can leave the field.
+- **Set collisions to 0 and wheel error to 0.** Only gyro drift is left. The odometry path slowly rotates away from the true one.
+- **Turn up vision noise.** The fused estimate gets noisier, and it follows odometry more closely between measurements. The filter trusts noisy measurements less.
+- **Watch the fused error after a collision.** It jumps, then drops back as soon as the next few tags come into view.
+- **Set collisions to 20 per minute.** This is a heavy defense match. The fused estimate still stays within tens of centimeters most of the time, but its worst moments are much worse, right after a hit and before a tag comes into view.
+
+The widget leaves out latency, motion blur, and bad measurements. A real estimator needs latency compensation and a filter that rejects outliers. Those are covered on the [pose estimation page](/docs/vision/pose-estimation#46-from-solution-to-robot-pose).
+
+## 1.6 What's next
+
+Before going into the math, decide what you want the camera to tell you: where a target is **relative** to the robot, or where the robot is on the **whole field**. That choice is the topic of [Relative vs. Global Positioning](/docs/vision/positioning).
