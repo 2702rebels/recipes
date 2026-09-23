@@ -92,7 +92,7 @@ $$
 
 Acceleration is **highest at the start**, when there is no back-EMF to fight, and **decays toward zero** as the mechanism approaches top speed. After one time constant, velocity is at $1 - 1/e \approx 63\%$ of $v_{\max}$ and acceleration has fallen to $1/e \approx 37\%$ of its starting value. Deceleration mirrors this. Because acceleration jumps straight to its maximum at $t = 0$, Expo does **not** limit jerk.
 
-**Numerical check.** A Kraken X60 (FOC) at 12 V, using constants from [§1.6.2](/docs/controls/ctre/motor-constants#162-derived-electromechanical-constants):
+**Numerical check.** A Kraken X60 (FOC) at 12 V, using constants from [§1.6.2](/docs/guides/ctre/motor-constants#162-derived-electromechanical-constants):
 - $k_e = 0.0198$ V·s/rad, $k_t = 0.0194$ N·m/A, $R = 0.0248$ Ω
 - A small turret: $G = 50$, total inertia at the rotor $J = 1 \times 10^{-4}$ kg·m²
 - $\text{Expo\_kV} = 2\pi \cdot 0.0198 \cdot 50 \approx 6.22$ V per (mechanism rotation/s)

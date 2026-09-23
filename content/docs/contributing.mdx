@@ -30,7 +30,7 @@ pnpm build      # static site in out/
 
 3. Add the page to the folder's `meta.json` so it appears where you want it in the sidebar. Pages not listed there are appended at the end.
 
-Use `##` for top-level sections. The page title is already the `#` heading. Link to other pages with absolute paths such as `/docs/controls/ctre/voltage#23-arm-position`.
+Use `##` for top-level sections. The page title is already the `#` heading. Link to other pages with absolute paths such as `/docs/guides/ctre/voltage#23-arm-position`.
 
 ## Callouts, cards, and tabs
 
@@ -42,7 +42,7 @@ Fumadocs components are available in every page without an import:
 </Callout>
 
 <Cards>
-  <Card title="Voltage Control" href="/docs/controls/ctre/voltage" description="Tuning in Volts." />
+  <Card title="Voltage Control" href="/docs/guides/ctre/voltage" description="Tuning in Volts." />
 </Cards>
 ```
 
@@ -63,7 +63,7 @@ Wrap the body of every tuning procedure in `<Procedure>`, and keep its heading o
 
 `mode` is `voltage` (teal panel) or `torque` (violet panel). Leave it out for procedures that apply to both. Leave a blank line after the opening tag and before the closing one, or the Markdown inside won't render. Steps keep counting across a display equation, so a list interrupted by `$$...$$` doesn't restart at 1. Keep interactive widgets outside the panel.
 
-Mechanism procedures are also listed in `lib/procedures.ts`, which builds the [Tuning Procedures](/docs/controls/ctre/procedures) index and the jump links under each mechanism heading (`<ProcedureLinks mechanism="Arm" mode="voltage" />`). Update it when you add or rename a procedure heading. Every panel gets a **Print** button automatically, and `<PrintProcedures />` adds a button that prints every procedure on the page.
+Mechanism procedures are also listed in `lib/procedures.ts`, which builds the [Tuning Procedures](/docs/guides/ctre/procedures) index and the jump links under each mechanism heading (`<ProcedureLinks mechanism="Arm" mode="voltage" />`). Update it when you add or rename a procedure heading. Every panel gets a **Print** button automatically, and `<PrintProcedures />` adds a button that prints every procedure on the page.
 
 ## Math
 
@@ -90,11 +90,11 @@ Interactive widgets live in `components/interactive/`. The current set:
 
 | Component | Used on | What it teaches |
 |:---|:---|:---|
-| `ExpoExplorer` | [Motion Magic Expo](/docs/controls/ctre/motion-magic-expo) | How Expo_kV and Expo_kA shape the profile, and where a trapezoid outruns the motor |
-| `MotorCurves` | [Motor Constants](/docs/controls/ctre/motor-constants), [Torque-Current](/docs/controls/ctre/torque-current#314-torque-vs-voltage-for-flywheels) | How back-EMF and the stator current limit set the available current at each speed, and the supply current it draws |
-| `GravityCalculator` | [Voltage](/docs/controls/ctre/voltage#233-calculating-kg-from-first-principles), [Torque-Current](/docs/controls/ctre/torque-current#342-first-principles-gains) | kG and kA from arm or elevator geometry, in Volts and Amps |
-| `BracketingSimulator` | [Torque-Current](/docs/controls/ctre/torque-current#333-tuning-procedure) | Finding kG and kS with the bracketing test |
-| `TuningSandbox` | [Torque-Current](/docs/controls/ctre/torque-current#torque-mode-has-no-built-in-damping) | Why torque mode needs kD, and where kD meets the latency limit |
+| `ExpoExplorer` | [Motion Magic Expo](/docs/guides/ctre/motion-magic-expo) | How Expo_kV and Expo_kA shape the profile, and where a trapezoid outruns the motor |
+| `MotorCurves` | [Motor Constants](/docs/guides/ctre/motor-constants), [Torque-Current](/docs/guides/ctre/torque-current#314-torque-vs-voltage-for-flywheels) | How back-EMF and the stator current limit set the available current at each speed, and the supply current it draws |
+| `GravityCalculator` | [Voltage](/docs/guides/ctre/voltage#233-calculating-kg-from-first-principles), [Torque-Current](/docs/guides/ctre/torque-current#342-first-principles-gains) | kG and kA from arm or elevator geometry, in Volts and Amps |
+| `BracketingSimulator` | [Torque-Current](/docs/guides/ctre/torque-current#333-tuning-procedure) | Finding kG and kS with the bracketing test |
+| `TuningSandbox` | [Torque-Current](/docs/guides/ctre/torque-current#torque-mode-has-no-built-in-damping) | Why torque mode needs kD, and where kD meets the latency limit |
 | `OdometryDrift` | [Why Vision](/docs/vision/localization#15-try-it-one-match-of-driving) | How odometry drifts, and how vision measurements pull a fused estimate back |
 | `RelativeVsGlobal` | [Positioning](/docs/vision/positioning#23-field-layout-errors-bias-vs-spread) | Bias and spread of relative and global positioning when a tag is off its layout position, on a top-down scene with a zoomed view of the scoring point |
 | `PinholeExplorer` | [Pose Estimation](/docs/vision/pose-estimation#43-how-far-away-is-the-tag) | How a tag projects into the image, and the second solution of a single-tag solve |

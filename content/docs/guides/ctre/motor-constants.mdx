@@ -5,7 +5,7 @@ description: Kraken X60 and X44 specifications and the derived constants used in
 
 ## 1.6 Motor Constants Reference
 
-The first-principles calculations in this document, especially for torque-current mode in [§3](/docs/controls/ctre/torque-current), need motor constants. This section collects the published values for both Kraken motors in both commutation modes.
+The first-principles calculations in this document, especially for torque-current mode in [§3](/docs/guides/ctre/torque-current), need motor constants. This section collects the published values for both Kraken motors in both commutation modes.
 
 **Commutation changes the constants.** The same motor behaves differently depending on how it is commutated:
 
@@ -70,7 +70,7 @@ In SI units, $k_t$ (N·m/A) and $k_e$ (V·s/rad) are equal for an ideal motor an
 
 ### 1.6.3 Quick-Reference Calculation Examples
 
-**Holding current for an arm at horizontal** (from [§3.3.2](/docs/controls/ctre/torque-current#332-first-principles-kg-in-torque-mode)):
+**Holding current for an arm at horizontal** (from [§3.3.2](/docs/guides/ctre/torque-current#332-first-principles-kg-in-torque-mode)):
 
 $$
 I_{\text{hold}} = \frac{m \cdot g \cdot L_{\text{cg}}}{G \cdot k_t}
@@ -104,7 +104,7 @@ $$
 \omega_{\text{out, no-load}} = \frac{V_{\text{supply}}}{k_V^{\text{rotor}} \cdot G}
 $$
 
-For the 50:1 Kraken X60 turret from [§1.4.1](/docs/controls/ctre/motion-magic-expo#141-motion-magic-expo-in-detail) (FOC, 12 V): $\omega_{\text{out}} = 12 / (0.124 \cdot 50) \approx 1.93$ rps ≈ 700°/s, the same top speed Expo computed there. Load and friction make the real number somewhat lower.
+For the 50:1 Kraken X60 turret from [§1.4.1](/docs/guides/ctre/motion-magic-expo#141-motion-magic-expo-in-detail) (FOC, 12 V): $\omega_{\text{out}} = 12 / (0.124 \cdot 50) \approx 1.93$ rps ≈ 700°/s, the same top speed Expo computed there. Load and friction make the real number somewhat lower.
 
 **See it for yourself.** The chart below plots the current each motor can actually draw at every speed. Back-EMF uses up more of the supply as speed rises, so the available current falls to zero at free speed. The stator current limit caps it at low speed. The chart also shows how much battery (supply) current that output draws, which is much less at low speed.
 

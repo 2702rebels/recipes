@@ -22,8 +22,8 @@ export interface GeneralProcedure {
   mode?: ProcedureMode;
 }
 
-const VOLTAGE = "/docs/controls/ctre/voltage";
-const TORQUE = "/docs/controls/ctre/torque-current";
+const VOLTAGE = "/docs/guides/ctre/voltage";
+const TORQUE = "/docs/guides/ctre/torque-current";
 
 /**
  * Every mechanism tuning procedure in the guide, linked by heading anchor. This is the single source for the
@@ -46,12 +46,12 @@ export const MECHANISM_PROCEDURES: MechanismProcedures[] = [
 export const GENERAL_PROCEDURES: GeneralProcedure[] = [
   {
     title: "General tuning workflow",
-    href: "/docs/controls/ctre/foundation#15-general-tuning-workflow",
+    href: "/docs/guides/ctre/foundation#15-general-tuning-workflow",
     description: "The order every tune follows: units, StaticFeedforwardSign, feedforward, then kP, kD, kI.",
   },
   {
     title: "Tuning Motion Magic Expo parameters",
-    href: "/docs/controls/ctre/motion-magic-expo#142-tuning-motion-magic-expo-parameters",
+    href: "/docs/guides/ctre/motion-magic-expo#142-tuning-motion-magic-expo-parameters",
     description: "Setting and checking MotionMagicExpo_kV and MotionMagicExpo_kA on the robot.",
   },
   {

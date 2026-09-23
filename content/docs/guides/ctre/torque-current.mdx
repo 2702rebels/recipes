@@ -5,7 +5,7 @@ description: Tuning with TorqueCurrentFOC requests (Phoenix Pro), and what torqu
 
 Torque-current requests command the torque-producing stator current ($I_q$) directly, using Field Oriented Control. They need Phoenix Pro on the Kraken X60 or X44.
 
-**About the name.** This section and [§4](/docs/controls/ctre/selection) say "FOC" to mean torque-current control, as most teams do. Strictly, FOC is a way of commutating the motor, and Phoenix Pro also uses it for voltage and duty-cycle requests when `EnableFOC = true` (see [§1.6](/docs/controls/ctre/motor-constants#16-motor-constants-reference)). What sets this section apart is the *output family*: Amps instead of Volts.
+**About the name.** This section and [§4](/docs/guides/ctre/selection) say "FOC" to mean torque-current control, as most teams do. Strictly, FOC is a way of commutating the motor, and Phoenix Pro also uses it for voltage and duty-cycle requests when `EnableFOC = true` (see [§1.6](/docs/guides/ctre/motor-constants#16-motor-constants-reference)). What sets this section apart is the *output family*: Amps instead of Volts.
 
 
 <PrintProcedures />
@@ -36,7 +36,7 @@ $$
 I = \frac{V}{R} \quad \Rightarrow \quad k_P^{\text{torque}} \approx \frac{k_P^{\text{voltage}}}{R}
 $$
 
-A voltage-mode kP of 30 V/rotation on a Kraken X60 (FOC, $R = 0.0248$ Ω from [§1.6.2](/docs/controls/ctre/motor-constants#162-derived-electromechanical-constants)) becomes about $30/0.0248 \approx 1210$ A/rotation. Treat this as a ballpark only. Modest errors will already hit the current limit, and once the output is clipped the loop stops behaving linearly. Tune from a lower starting point (see the procedures below).
+A voltage-mode kP of 30 V/rotation on a Kraken X60 (FOC, $R = 0.0248$ Ω from [§1.6.2](/docs/guides/ctre/motor-constants#162-derived-electromechanical-constants)) becomes about $30/0.0248 \approx 1210$ A/rotation. Treat this as a ballpark only. Modest errors will already hit the current limit, and once the output is clipped the loop stops behaving linearly. Tune from a lower starting point (see the procedures below).
 
 ## 3.0.3 Feedforward in Torque Mode
 
@@ -44,7 +44,7 @@ A voltage-mode kP of 30 V/rotation on a Kraken X60 (FOC, $R = 0.0248$ Ω from [�
 
 | Term | Active in `VelocityTorqueCurrentFOC` | Active in `PositionTorqueCurrentFOC` (no velocity arg) | Active in `MotionMagic*TorqueCurrentFOC` |
 |:---|:---|:---|:---|
-| kS | Yes | Yes (via `StaticFeedforwardSign` config — see [§1.2.1](/docs/controls/ctre/foundation#121-the-staticfeedforwardsign-config)) | Yes |
+| kS | Yes | Yes (via `StaticFeedforwardSign` config — see [§1.2.1](/docs/guides/ctre/foundation#121-the-staticfeedforwardsign-config)) | Yes |
 | kV | Yes — represents drag | No (no $v_{\text{ref}}$) | Yes |
 | kA | Yes (if profiled or with explicit acceleration) | No (no $a_{\text{ref}}$) | Yes |
 | kG | Always applied (set kG = 0 for a flywheel) | Yes | Yes |
@@ -248,7 +248,7 @@ $$
 I_q(t) = k_S \cdot \sigma_{\text{kS}} + k_P \cdot e_\theta + k_I \int e_\theta\,dt + k_D \cdot \dot{e}_\theta
 $$
 
-with $\sigma_{\text{kS}}$ set by `StaticFeedforwardSign` ([§1.2.1](/docs/controls/ctre/foundation#121-the-staticfeedforwardsign-config)). Use `UseClosedLoopSign` here so kS acts on small corrections. With the default, $\sigma_{\text{kS}} = 0$ and kS does nothing.
+with $\sigma_{\text{kS}}$ set by `StaticFeedforwardSign` ([§1.2.1](/docs/guides/ctre/foundation#121-the-staticfeedforwardsign-config)). Use `UseClosedLoopSign` here so kS acts on small corrections. With the default, $\sigma_{\text{kS}} = 0$ and kS does nothing.
 
 For `MotionMagicExpoTorqueCurrentFOC`:
 
@@ -312,7 +312,7 @@ $$
 I_q(t) = k_S \cdot \sigma_{\text{kS}} + k_G \cos(\theta) + k_P \cdot e_\theta + k_I \int e_\theta\,dt + k_D \cdot \dot{e}_\theta
 $$
 
-with $\sigma_{\text{kS}}$ set by `StaticFeedforwardSign` ([§1.2.1](/docs/controls/ctre/foundation#121-the-staticfeedforwardsign-config)). Use `UseClosedLoopSign` without a profile: kG supplies the holding current, and kS only needs to act on small corrections, in whichever direction the error points.
+with $\sigma_{\text{kS}}$ set by `StaticFeedforwardSign` ([§1.2.1](/docs/guides/ctre/foundation#121-the-staticfeedforwardsign-config)). Use `UseClosedLoopSign` without a profile: kG supplies the holding current, and kS only needs to act on small corrections, in whichever direction the error points.
 
 For `MotionMagicExpoTorqueCurrentFOC`:
 
@@ -328,7 +328,7 @@ $$
 I_{\text{hold}} = \frac{\tau_{\text{gravity}}}{G \cdot k_t} = \frac{m \cdot g \cdot L_{\text{cg}}}{G \cdot k_t}
 $$
 
-Example: 5 kg arm with CG at 0.4 m from pivot, gear ratio 100:1, Kraken X60 in FOC mode ($k_t = 0.0194$ N·m/A from [§1.6.2](/docs/controls/ctre/motor-constants#162-derived-electromechanical-constants)):
+Example: 5 kg arm with CG at 0.4 m from pivot, gear ratio 100:1, Kraken X60 in FOC mode ($k_t = 0.0194$ N·m/A from [§1.6.2](/docs/guides/ctre/motor-constants#162-derived-electromechanical-constants)):
 
 $$
 I_{\text{hold}} = \frac{5 \cdot 9.81 \cdot 0.4}{100 \cdot 0.0194} = 10.1 \text{ A}
@@ -431,7 +431,7 @@ The calculator does the arithmetic for both kA forms. Switch it to Arm for the c
 
 1. **Predictable acceleration.** $a = (I - I_{\text{gravity}}) / (m r / (G k_t))$: a given current gives a known acceleration at any speed, within the voltage headroom of [§3.0.1](#301-why-torque-control-is-different).
 2. **Current is bounded explicitly.** `PeakForwardTorqueCurrent` / `PeakReverseTorqueCurrent` cap the output directly, so you can size them for the hardest acceleration and know they won't be exceeded. (Voltage mode relies on the stator and supply limits for the same job.)
-3. **The same force up and down.** Current-to-force is identical in both directions. In voltage mode, back-EMF eats into headroom on fast up-moves while gravity helps on down-moves, so the loop feels different each way. Torque mode removes that difference (again within the voltage headroom). The *friction* difference of [§2.4.6](/docs/controls/ctre/voltage#246-asymmetric-friction) is mechanical and stays.
+3. **The same force up and down.** Current-to-force is identical in both directions. In voltage mode, back-EMF eats into headroom on fast up-moves while gravity helps on down-moves, so the loop feels different each way. Torque mode removes that difference (again within the voltage headroom). The *friction* difference of [§2.4.6](/docs/guides/ctre/voltage#246-asymmetric-friction) is mechanical and stays.
 
 ### 3.4.4 Tuning Procedure
 
@@ -487,7 +487,7 @@ if (deploymentExtended && readyToApplyForce) {
 
 (Create control requests once and update them each loop, rather than allocating new ones.)
 
-The state machine follows a position while extending and applies a set force while holding. Voltage mode can't do this cleanly. At a stall, current is $V/R$, and $R$ changes by around 25% as the motor warms up ([§1.6.4](/docs/controls/ctre/motor-constants#164-caveats)), so a fixed voltage doesn't give a fixed force.
+The state machine follows a position while extending and applies a set force while holding. Voltage mode can't do this cleanly. At a stall, current is $V/R$, and $R$ changes by around 25% as the motor warms up ([§1.6.4](/docs/guides/ctre/motor-constants#164-caveats)), so a fixed voltage doesn't give a fixed force.
 
 ### 3.5.3 Tuning Procedure
 

@@ -67,7 +67,7 @@ These rules apply to all prose: pages, callouts, component labels and captions, 
 
 - Frontmatter needs `title` and `description`. The title is the page's `#` heading, so start sections at `##`.
 - Add new pages to the folder's `meta.json`. A folder's `index.mdx` is its landing page and should not be listed in `pages`.
-- Link between pages with absolute paths (`/docs/controls/ctre/voltage#23-arm-position`). They work unchanged if a base path is ever added.
+- Link between pages with absolute paths (`/docs/guides/ctre/voltage#23-arm-position`). They work unchanged if a base path is ever added.
 - Math uses `$...$` inline and `$$...$$` on their own lines. Write plain LaTeX (`\,`, `\_`, `\%`), not the doubled backslashes GitHub's Markdown needs. Avoid Unicode such as `²` inside `\text{}`. Use `^2`.
 - Outside code and math, `<` starts a component and `{` starts an expression. Write "less than" or `&lt;`.
 - Wrap every tuning procedure body in `<Procedure mechanism="…" mode="voltage|torque">` (see `components/procedure.tsx`). Keep the heading outside the component and interactive widgets outside the panel.

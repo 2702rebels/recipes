@@ -12,7 +12,7 @@ const SECTIONS: { title: string; href: string; description: string; icon: ReactN
   },
   {
     title: "CTRE Control Modes",
-    href: "/docs/controls/ctre",
+    href: "/docs/guides/ctre",
     description: "Closed-loop tuning for every common mechanism, in Volts and Amps, with interactive explorers.",
     icon: <Gauge className="size-5" />,
   },
@@ -49,12 +49,12 @@ export default function HomePage() {
             Start reading
           </Link>
           <Link
-            href="/docs/controls/ctre/procedures"
+            href="/docs/guides/ctre/procedures"
             className="rounded-lg border border-fd-border px-4 py-2 text-sm font-medium hover:bg-fd-accent">
             Tune a mechanism
           </Link>
           <Link
-            href="/docs/controls/ctre/motion-magic-expo"
+            href="/docs/guides/ctre/motion-magic-expo"
             className="rounded-lg border border-fd-border px-4 py-2 text-sm font-medium hover:bg-fd-accent">
             Try the Expo explorer
           </Link>

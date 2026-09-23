@@ -7,7 +7,7 @@ This section tunes each mechanism with `VelocityVoltage`, `PositionVoltage`, `Mo
 
 Voltage requests compensate for battery sag: ask for 8 V and the firmware measures the supply and adjusts its duty cycle to deliver 8 V, as long as the battery can. They do **not** compensate for back-EMF. A spinning motor pushes back against its own supply, and kV is exactly the voltage needed to cancel that.
 
-The motor equation from [§1.4.1](/docs/controls/ctre/motion-magic-expo#141-motion-magic-expo-in-detail) again:
+The motor equation from [§1.4.1](/docs/guides/ctre/motion-magic-expo#141-motion-magic-expo-in-detail) again:
 
 $$
 V_{\text{applied}} = R \cdot I + \omega \cdot k_e
@@ -19,7 +19,7 @@ $$
 V_{\text{applied}} = \frac{R}{k_t} \cdot \tau + k_e \cdot \omega
 $$
 
-The second term is what kV cancels. It also explains why mechanisms get weaker near top speed: the faster the motor spins, the less voltage is left over to produce torque. (This limit is physical and applies in torque-current mode too. See [§3.1.4](/docs/controls/ctre/torque-current#314-torque-vs-voltage-for-flywheels).)
+The second term is what kV cancels. It also explains why mechanisms get weaker near top speed: the faster the motor spins, the less voltage is left over to produce torque. (This limit is physical and applies in torque-current mode too. See [§3.1.4](/docs/guides/ctre/torque-current#314-torque-vs-voltage-for-flywheels).)
 
 
 <PrintProcedures />
@@ -62,7 +62,7 @@ where $v_{\text{ref}}(t)$ now ramps toward the target at the configured `MotionM
 
 <Procedure mechanism="Flywheel" mode="voltage">
 
-1. **Run SysId in voltage mode** to get kS, kV, kA. Expect results near the no-load values from [§1.6.3](/docs/controls/ctre/motor-constants#163-quick-reference-calculation-examples) plus 5–15% for friction: about kV ≈ 0.12–0.14 V/(rotation/s) at the rotor for a Kraken X60, and 0.10–0.11 for an X44.
+1. **Run SysId in voltage mode** to get kS, kV, kA. Expect results near the no-load values from [§1.6.3](/docs/guides/ctre/motor-constants#163-quick-reference-calculation-examples) plus 5–15% for friction: about kV ≈ 0.12–0.14 V/(rotation/s) at the rotor for a Kraken X60, and 0.10–0.11 for an X44.
 2. **Check kV with kP = kI = 0.** Command a setpoint and check the steady-state speed. If it settles 5% low, kV is 5% low. Fix that before adding kP.
 3. **Add kP.** Size it from the voltage headroom you have left. At 80 rps with kV = 0.12, holding speed takes ~9.6 V, leaving ~2.4 V. To use all of that headroom when the error reaches 20 rps:
 
@@ -95,7 +95,7 @@ $$
 V(t) = k_S \cdot \sigma_{\text{kS}} + k_P \cdot e_\theta + k_I \int e_\theta\,dt + k_D \cdot \dot{e}_\theta
 $$
 
-where $e_\theta = \theta_{\text{ref}} - \theta_{\text{measured}}$ and $\sigma_{\text{kS}}$ is determined by the `StaticFeedforwardSign` config (see [§1.2.1](/docs/controls/ctre/foundation#121-the-staticfeedforwardsign-config)):
+where $e_\theta = \theta_{\text{ref}} - \theta_{\text{measured}}$ and $\sigma_{\text{kS}}$ is determined by the `StaticFeedforwardSign` config (see [§1.2.1](/docs/guides/ctre/foundation#121-the-staticfeedforwardsign-config)):
 
 - With the default `UseVelocitySign`: $\sigma_{\text{kS}} = \mathrm{sgn}(\dot{\theta}_{\text{ref}})$, which is **zero** when the request has no velocity, so kS does nothing.
 - With `UseClosedLoopSign`: $\sigma_{\text{kS}} = \mathrm{sgn}(e_\theta)$, so kS pushes in the direction of the error. **Use this for plain `PositionVoltage` on a turret.**
@@ -138,7 +138,7 @@ Now the profile supplies $v_{\text{ref}}$ and $a_{\text{ref}}$ every loop, so kV
 7. **Tune the profile last:**
    - **Trapezoidal cruise velocity:** leave 2–3 V of headroom above the kV term. With kV = 6 and a 9 V budget, cruise ≈ 1.5 rps.
    - **Trapezoidal acceleration:** start where $k_A \cdot a_{\max} + k_V \cdot v_{\max} \le 11$ V (1 V margin), then raise it while watching tracking error.
-   - **Expo:** set `MotionMagicExpo_kV` and `MotionMagicExpo_kA` to 1.1–1.2× the SysId kV and kA ([§1.4.2](/docs/controls/ctre/motion-magic-expo#142-tuning-motion-magic-expo-parameters)), with `MotionMagicCruiseVelocity = 0` so the profile runs to what the motor allows.
+   - **Expo:** set `MotionMagicExpo_kV` and `MotionMagicExpo_kA` to 1.1–1.2× the SysId kV and kA ([§1.4.2](/docs/guides/ctre/motion-magic-expo#142-tuning-motion-magic-expo-parameters)), with `MotionMagicCruiseVelocity = 0` so the profile runs to what the motor allows.
 
 </Procedure>
 
@@ -165,7 +165,7 @@ $$
 V(t) = k_S \cdot \sigma_{\text{kS}} + k_G \cos(\theta) + k_P \cdot e_\theta + k_I \int e_\theta\,dt + k_D \cdot \dot{e}_\theta
 $$
 
-with $\sigma_{\text{kS}}$ set by `StaticFeedforwardSign` ([§1.2.1](/docs/controls/ctre/foundation#121-the-staticfeedforwardsign-config)). Use `UseClosedLoopSign` with `PositionVoltage`: kG already supplies the holding voltage, and kS only needs to break stiction on small corrections, in whichever direction the error points.
+with $\sigma_{\text{kS}}$ set by `StaticFeedforwardSign` ([§1.2.1](/docs/guides/ctre/foundation#121-the-staticfeedforwardsign-config)). Use `UseClosedLoopSign` with `PositionVoltage`: kG already supplies the holding voltage, and kS only needs to break stiction on small corrections, in whichever direction the error points.
 
 Phoenix 6 computes $\cos(\theta)$ from the measured position, so **position 0 must mean horizontal**, and one mechanism rotation must be one full arm revolution. If the zero is wrong, the cosine is wrong everywhere. If your natural zero is elsewhere (a hard stop, or a center of gravity that is off the arm's line), set `GravityArmPositionOffset` in the slot (range ±0.25 rotation) instead of moving the zero.
 
@@ -211,15 +211,15 @@ $$
 k_G = I \cdot R = \frac{\tau_{\text{motor}} \cdot R}{k_t} = \frac{m \cdot g \cdot L_{\text{cg}} \cdot R}{G \cdot k_t}
 $$
 
-$m$ is the arm mass, $g = 9.81$ m/s², $L_{\text{cg}}$ the distance from pivot to center of gravity, and $k_t$ and $R$ come from [§1.6.2](/docs/controls/ctre/motor-constants#162-derived-electromechanical-constants).
+$m$ is the arm mass, $g = 9.81$ m/s², $L_{\text{cg}}$ the distance from pivot to center of gravity, and $k_t$ and $R$ come from [§1.6.2](/docs/guides/ctre/motor-constants#162-derived-electromechanical-constants).
 
-**Worked example.** A 5 kg arm with CG at 0.4 m, gear ratio 100:1, on a Kraken X60 in voltage mode (FOC commutation, so $k_t = 0.0194$ N·m/A, $R = 0.0248$ Ω from [§1.6.2](/docs/controls/ctre/motor-constants#162-derived-electromechanical-constants)):
+**Worked example.** A 5 kg arm with CG at 0.4 m, gear ratio 100:1, on a Kraken X60 in voltage mode (FOC commutation, so $k_t = 0.0194$ N·m/A, $R = 0.0248$ Ω from [§1.6.2](/docs/guides/ctre/motor-constants#162-derived-electromechanical-constants)):
 
 $$
 k_G = \frac{5 \cdot 9.81 \cdot 0.4 \cdot 0.0248}{100 \cdot 0.0194} = \frac{0.4865}{1.94} \approx 0.25 \text{ V}
 $$
 
-It's small because at 100:1 the motor barely has to push. It agrees with the torque-mode holding current for the same arm in [§1.6.3](/docs/controls/ctre/motor-constants#163-quick-reference-calculation-examples): $V = I \cdot R = 10.1 \times 0.0248 = 0.25$ V at zero speed. Expect the measured value to be somewhat higher, since a warm motor and the wiring add resistance.
+It's small because at 100:1 the motor barely has to push. It agrees with the torque-mode holding current for the same arm in [§1.6.3](/docs/guides/ctre/motor-constants#163-quick-reference-calculation-examples): $V = I \cdot R = 10.1 \times 0.0248 = 0.25$ V at zero speed. Expect the measured value to be somewhat higher, since a warm motor and the wiring add resistance.
 
 **Try your own arm.** The calculator gives kG and kA in both Volts and Amps. Its defaults match the worked example above.
 
@@ -252,14 +252,14 @@ $$
 7. **Add a small kI (~0.1–1.0 V/(rotation·s))** if the final position drifts.
 8. **Tune the profile:**
    - **Trapezoidal:** choose a cruise velocity that leaves headroom at the worst gravity load. With kG = 0.6 V, kV = 4 V/rps, and a 2 V margin: $(12 - 0.6 - 2)/4 = 2.35$ rps.
-   - **Expo:** set `MotionMagicExpo_kV` and `MotionMagicExpo_kA` to 1.1–1.2× the SysId kV and kA ([§1.4.2](/docs/controls/ctre/motion-magic-expo#142-tuning-motion-magic-expo-parameters)). The profile then stays within what the motor can do.
+   - **Expo:** set `MotionMagicExpo_kV` and `MotionMagicExpo_kA` to 1.1–1.2× the SysId kV and kA ([§1.4.2](/docs/guides/ctre/motion-magic-expo#142-tuning-motion-magic-expo-parameters)). The profile then stays within what the motor can do.
 
 </Procedure>
 
 ### 2.3.6 Pitfalls
 
 - **`GravityType` left at the default.** The default is `Elevator_Static`, which applies kG as a constant. Without `GravityType = Arm_Cosine`, the arm is over-supported near vertical and under-supported near horizontal (or the reverse).
-- **Two-joint arms.** When a second joint moves relative to the first, gravity torque on the shoulder depends on the elbow angle too, which a single cosine can't capture. Compute the gravity feedforward in code and pass it through the request's `FeedForward` argument every loop, with slot kG = 0 (see [§3.3.4](/docs/controls/ctre/torque-current#334-compound-arms-multi-joint)). Don't write `Slot0Configs.kG` every loop: config writes are slow, blocking CAN transactions.
+- **Two-joint arms.** When a second joint moves relative to the first, gravity torque on the shoulder depends on the elbow angle too, which a single cosine can't capture. Compute the gravity feedforward in code and pass it through the request's `FeedForward` argument every loop, with slot kG = 0 (see [§3.3.4](/docs/guides/ctre/torque-current#334-compound-arms-multi-joint)). Don't write `Slot0Configs.kG` every loop: config writes are slow, blocking CAN transactions.
 - **Different friction up and down.** Once kG is right, any remaining up/down difference is friction, and a slot holds only one kS. Use one slot per direction (as in [§2.4.6](#246-asymmetric-friction)), or pick a compromise kS and let a small kI absorb the rest.
 - **Leave `ContinuousWrap` off.** Arms have a limited range. Set soft limits instead.
 
@@ -277,7 +277,7 @@ $$
 V(t) = k_S \cdot \sigma_{\text{kS}} + k_G + k_P \cdot e_x + k_I \int e_x\,dt + k_D \cdot \dot{e}_x
 $$
 
-with $\sigma_{\text{kS}}$ set by `StaticFeedforwardSign` ([§1.2.1](/docs/controls/ctre/foundation#121-the-staticfeedforwardsign-config)). Use `UseClosedLoopSign` with `PositionVoltage` so kS helps with small height corrections. With the default, kS never engages on a step setpoint.
+with $\sigma_{\text{kS}}$ set by `StaticFeedforwardSign` ([§1.2.1](/docs/guides/ctre/foundation#121-the-staticfeedforwardsign-config)). Use `UseClosedLoopSign` with `PositionVoltage` so kS helps with small height corrections. With the default, kS never engages on a step setpoint.
 
 kG is a **constant** here: with `GravityType = Elevator_Static`, the firmware always adds it. Its sign is the direction that opposes gravity, which is positive in the usual setup where positive output raises the elevator.
 
@@ -321,12 +321,12 @@ How the stages are rigged decides whether one kG is enough:
 3. **Find kG by hand (bracketing).** With PID off, command a small upward voltage (start at 0.5 V) and raise it:
    - When the elevator **just stops sliding down**, you're at $k_G - k_S$ (friction is helping hold it).
    - When it **just starts rising**, you're at $k_G + k_S$.
-   - kG is the midpoint and kS is half the difference. The torque-mode version in [§3.4.4](/docs/controls/ctre/torque-current#344-tuning-procedure) works the same way.
+   - kG is the midpoint and kS is half the difference. The torque-mode version in [§3.4.4](/docs/guides/ctre/torque-current#344-tuning-procedure) works the same way.
 4. **Run SysId's elevator test** for kS, kV, kA, kG together, and compare with step 3. If there isn't enough travel for a clean run, split it into shorter segments.
 5. **Feedforward only.** With PID at zero, the elevator should hold at any height.
 6. **Add kP.** Elevators are rigid and tolerate fairly high kP. If your unit is meters, start around 1 V per cm of error (100 V/m) and increase until recovery is brisk.
 7. **Add kD.** Often around $k_P / 50$. Increase if moves overshoot at the top or bottom.
-8. **Set up Expo** ([§1.4.2](/docs/controls/ctre/motion-magic-expo#142-tuning-motion-magic-expo-parameters)): `MotionMagicExpo_kV` and `MotionMagicExpo_kA` at 1.1–1.2× the SysId kV and kA. Leave `MotionMagicCruiseVelocity = 0` for full speed, or set it to cap top speed.
+8. **Set up Expo** ([§1.4.2](/docs/guides/ctre/motion-magic-expo#142-tuning-motion-magic-expo-parameters)): `MotionMagicExpo_kV` and `MotionMagicExpo_kA` at 1.1–1.2× the SysId kV and kA. Leave `MotionMagicCruiseVelocity = 0` for full speed, or set it to cap top speed.
 
 </Procedure>
 
@@ -370,7 +370,7 @@ $$
 V(t) = k_S \cdot \sigma_{\text{kS}} + k_G \cos(\theta) + k_V \cdot v_{\text{ref}} + k_A \cdot a_{\text{ref}} + k_P \cdot e_\theta + k_D \cdot \dot{e}_\theta
 $$
 
-Use `GravityType = Elevator_Static` for the first case and `Arm_Cosine` for the second. Choose $\sigma_{\text{kS}}$ as in [§1.2.1](/docs/controls/ctre/foundation#121-the-staticfeedforwardsign-config): `UseClosedLoopSign` for plain `PositionVoltage`, the default `UseVelocitySign` for Motion Magic. (kV and kA only act when there is a profile.)
+Use `GravityType = Elevator_Static` for the first case and `Arm_Cosine` for the second. Choose $\sigma_{\text{kS}}$ as in [§1.2.1](/docs/guides/ctre/foundation#121-the-staticfeedforwardsign-config): `UseClosedLoopSign` for plain `PositionVoltage`, the default `UseVelocitySign` for Motion Magic. (kV and kA only act when there is a profile.)
 
 ### 2.5.2 Recommended Mode
 

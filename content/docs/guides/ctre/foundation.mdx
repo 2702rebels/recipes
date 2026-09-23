@@ -37,7 +37,7 @@ Where:
 | **kD** | Output per unit error rate | V / (mechanism unit / s) | A / (mechanism unit / s) |
 | **kS** | Static friction compensation | V | A |
 | **kV** | Velocity feedforward | V / (rotation/s) | A / (rotation/s) — typically 0 |
-| **kA** | Acceleration feedforward | V / (rotation/s²) | A / (rotation/s²), set by inertia (see [§3.0.3](/docs/controls/ctre/torque-current#303-feedforward-in-torque-mode)) |
+| **kA** | Acceleration feedforward | V / (rotation/s²) | A / (rotation/s²), set by inertia (see [§3.0.3](/docs/guides/ctre/torque-current#303-feedforward-in-torque-mode)) |
 | **kG** | Gravity feedforward | V | A |
 
 ### 1.2.1 The `StaticFeedforwardSign` Config
@@ -88,7 +88,7 @@ $$
 
 With good feedforward, the mechanism follows these closely.
 
-**Motion Magic Expo** — `MotionMagicExpoVoltage` / `MotionMagicExpoTorqueCurrentFOC`. Builds an exponential profile from a model of the motor instead of from limits you pick. See [§1.4.1](/docs/controls/ctre/motion-magic-expo#141-motion-magic-expo-in-detail).
+**Motion Magic Expo** — `MotionMagicExpoVoltage` / `MotionMagicExpoTorqueCurrentFOC`. Builds an exponential profile from a model of the motor instead of from limits you pick. See [§1.4.1](/docs/guides/ctre/motion-magic-expo#141-motion-magic-expo-in-detail).
 
 **When to use which:**
 
@@ -102,10 +102,10 @@ With good feedforward, the mechanism follows these closely.
 
 1. **Set units.** Set `SensorToMechanismRatio` in `FeedbackConfigs` so positions are in mechanism rotations (the arm, turret, or drum turns once per unit) rather than rotor rotations. Every gain below is per mechanism unit.
 2. **Set `StaticFeedforwardSign`** for the request you'll use ([§1.2.1](#121-the-staticfeedforwardsign-config)): the default `UseVelocitySign` for velocity and Motion Magic, `UseClosedLoopSign` for plain `PositionVoltage` / `PositionTorqueCurrentFOC`.
-3. **Characterize.** Get kS, kV, kA, and (for arms and elevators) kG in your output family's units. For voltage mode, SysId is the standard tool. For torque-current mode, compute kG and kA from physics and measure kS by hand ([§3.0.4](/docs/controls/ctre/torque-current#304-sysid-and-torque-current-what-actually-transfers) explains why).
+3. **Characterize.** Get kS, kV, kA, and (for arms and elevators) kG in your output family's units. For voltage mode, SysId is the standard tool. For torque-current mode, compute kG and kA from physics and measure kS by hand ([§3.0.4](/docs/guides/ctre/torque-current#304-sysid-and-torque-current-what-actually-transfers) explains why).
 4. **Feedforward only.** Enter the feedforwards with all PID gains at zero. The mechanism should roughly follow slow setpoints.
 5. **Add kP** until disturbances are rejected well, stopping short of sustained oscillation.
-6. **Add kD** if position moves oscillate. Start around kP/100 in voltage mode and kP/30 to kP/10 in torque mode, which lacks back-EMF damping ([§3.0.3](/docs/controls/ctre/torque-current#303-feedforward-in-torque-mode)).
+6. **Add kD** if position moves oscillate. Start around kP/100 in voltage mode and kP/30 to kP/10 in torque mode, which lacks back-EMF damping ([§3.0.3](/docs/guides/ctre/torque-current#303-feedforward-in-torque-mode)).
 7. **Add kI** only as a last resort, for steady-state error the model doesn't explain.
 8. **Tune the profile last** (cruise velocity and acceleration, or Expo_kV and Expo_kA), once PID plus feedforward handles arbitrary setpoints.
 
