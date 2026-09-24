@@ -102,6 +102,8 @@ To get the mount right:
 3. **Check on the field.** Place the robot at a measured spot, facing a tag head-on. The reported heading error is the mount yaw error. The reported position error, after the heading is fixed, is mostly the mount position error.
 4. **Check the roll and pitch of the solved pose.** On a flat floor the robot's roll and pitch are zero. A steady nonzero value points at a mount angle error.
 
+A factor graph can also estimate the mount from driving data, with the mount as an unknown (see [Factor Graphs §4.3](/docs/localization/factor-graphs#43-factors-for-an-frc-robot)).
+
 ## 5.6 Rolling vs. global shutter
 
 **For pose estimation on a moving robot, use a global-shutter camera if you can.** With a rolling shutter, take the heading from the gyro, timestamp each measurement at the moment the tag's rows were read, and trust single-tag solves less while the robot turns.

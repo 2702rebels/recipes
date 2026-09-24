@@ -1,0 +1,181 @@
+---
+title: Factor Graphs and GTSAM
+description: Localization by solving for the recent trajectory at once. Factor graphs, factors for odometry, gyro, and tag corners in pixels, robust losses for bad measurements, and running GTSAM on an FRC robot.
+---
+
+<Callout type="warn" title="Advanced and experimental">
+  This page is advanced material. Using GTSAM on an FRC robot is experimental as of September 2026. Don't use it on a
+  competition robot unless you already have deep experience with factor graphs and GTSAM. For competition, use the
+  [WPILib pose estimator](/docs/localization/wpilib-estimator).
+</Callout>
+
+A **factor graph** solves for the robot's whole recent trajectory at once, instead of updating one pose step by step. Each measurement becomes a **factor**, a soft constraint on one or more poses, and a solver finds the trajectory that fits all of them best. GTSAM (Georgia Tech Smoothing and Mapping) is the best-known library for this. In short:
+
+1. **The live estimate is not magic.** With Gaussian noise and no outliers, the newest pose from a factor graph matches a Kalman filter exactly.
+2. **The gains come from what you can put in the graph.** Tag corners in pixels instead of a solved pose, measurements at their true capture time, robust losses for bad measurements, and extra unknowns such as gyro drift or the camera mount.
+3. **It costs complexity.** A native library, solver time that varies from loop to loop, and many more ways to get it wrong. Most teams should get the [WPILib estimator](/docs/localization/wpilib-estimator) working well first.
+
+This page assumes you have read [Kalman Filters](/docs/localization/kalman-filters). The PnP refinement on [Pose Estimation §4.4.2](/docs/vision/pose-estimation#442-refinement-minimizing-reprojection-error) is the same kind of solve, on a smaller problem.
+
+## 4.1 Filtering vs. smoothing
+
+A **filter** keeps only the current pose. When a measurement arrives, it updates that pose and forgets the past. Every decision is final.
+
+A **smoother** keeps a history of poses. When a measurement arrives, it re-solves the history. A measurement at 10 s can change the estimate at 9 s, and the change carries forward to now.
+
+For a linear model with Gaussian noise, the two give the **same current pose**. The smoother's extra history only improves the past. It helps the present when the problem is not like that:
+
+- **Nonlinear models.** An extended Kalman filter linearizes once, at the estimate it had then, and never revisits it. A smoother re-linearizes around its improved estimate each time it solves, like the iterations of a PnP solver.
+- **Delayed measurements.** A measurement is attached to the pose at its capture time. There is no need to rewind and replay odometry.
+- **Outliers.** A robust loss ([§4.4](#44-robust-losses)) can decide, after more measurements arrive, that an earlier one was bad, and undo its effect.
+- **Unknowns that are not the pose.** Gyro drift rate, camera mount, tag positions. The smoother estimates them from all the data together.
+
+## 4.2 What a factor graph is
+
+<FactorGraphDiagram />
+
+A factor graph has two kinds of nodes:
+
+- **Variables** (circles) are the unknowns: the robot's pose at each moment you care about, and anything else you want to estimate.
+- **Factors** (squares) are measurements. Each one connects the variables it depends on and says how much it dislikes each possible value of them.
+
+Each factor $i$ has a **residual** $r_i$, the difference between what it measured and what the variables predict. It also has a **noise model**, a covariance $\Sigma_i$ saying how big that difference normally is. The solver finds the variables $X$ that minimize the total:
+
+$$
+X^\ast = \arg\min_X \sum_i \left\lVert r_i(X) \right\rVert^2_{\Sigma_i}, \qquad \lVert r \rVert^2_{\Sigma} = r^\top \Sigma^{-1} r
+$$
+
+Each residual is divided by its own standard deviation, so a 2-pixel corner error and a 2 cm odometry error are compared fairly. With Gaussian noise, the minimum is the most likely trajectory given all the measurements.
+
+The residuals are nonlinear in the poses, so the solver works in steps. It linearizes, solves a linear system, updates the poses, and repeats: Gauss–Newton or Levenberg–Marquardt, as on [Pose Estimation §4.4.2](/docs/vision/pose-estimation#442-refinement-minimizing-reprojection-error). Each factor only touches a few variables, so the linear system is **sparse**: mostly zeros. That is what makes solving hundreds of poses fast enough for a robot.
+
+## 4.3 Factors for an FRC robot
+
+| Factor | Connects | Measures | In GTSAM |
+|:---|:---|:---|:---|
+| **Prior** | One pose | The starting pose, or any pose you know (for example after a reset) | `PriorFactor<Pose2>` |
+| **Odometry** | Two poses in a row | The twist between them, from the kinematics ([Basics §1.2](/docs/localization/basics#12-odometry-step-by-step)) | `BetweenFactor<Pose2>` |
+| **Gyro** | One pose, or two in a row | The heading, or the change in heading | A rotation prior, or a between factor on heading only |
+| **Tag corner** | One pose | Where one tag corner appeared in the image, in pixels | `PlanarProjectionFactor1` |
+
+The tag-corner factor is the important one. It predicts where a known corner on the field should appear in the image, from the robot's pose, the camera mount, and the calibration. Its residual is the difference from where the detector found the corner, in pixels. Its noise model is in pixels too: about one pixel, from [AprilTags §3.3](/docs/vision/apriltags#33-how-a-detector-finds-tags).
+
+This changes how vision uncertainty is handled. With a whole-pose measurement, you guess a standard deviation for $x$, $y$, and $\theta$ ([WPILib Estimators §3.4](/docs/localization/wpilib-estimator#34-choosing-standard-deviations)). With corner factors, the solver works out the uncertainty from the geometry. Range to a tag is measured well, and the sideways angle is not, so one tag gives a curved, crescent-shaped cloud of likely poses around it. The scatter on [Pose Estimation §4.5](/docs/vision/pose-estimation#45-many-tags-one-solve) shows the same shape. The factor graph gets it without any tuning.
+
+It also changes the [single-tag ambiguity](/docs/vision/pose-estimation#443-the-planar-ambiguity). There is no separate PnP solve that has to pick one of two answers. The corners are fit together with odometry and the gyro, starting from the current estimate. The second solution is far from where odometry says the robot is, so the solver normally doesn't go there.
+
+`PlanarProjectionFactor1` was written for FRC: a robot on the floor (a `Pose2`), a fixed field map, and fiducial markers. It has two variants that estimate more:
+
+- **`PlanarProjectionFactor2`** also treats the corner's position on the field as unknown. With a strong prior from the layout, it can absorb small tag placement errors ([Positioning §2.3](/docs/vision/positioning#23-field-layout-errors-bias-vs-spread)).
+- **`PlanarProjectionFactor3`** also treats the camera mount and the calibration as unknown. It can refine the camera's pose on the robot from driving data ([Calibration §5.5](/docs/vision/calibration#55-extrinsics-where-the-camera-is-on-the-robot)).
+
+Adding unknowns needs enough data to pin them down. Estimate the camera mount from a dedicated practice run with many tags in view, then fix it for matches.
+
+## 4.4 Robust losses
+
+A squared residual grows fast. A corner that is 20 pixels off costs 400 times as much as one that is 1 pixel off, so one bad measurement can drag the whole solution. A **robust loss** grows more slowly for large residuals. With $u$ the residual in standard deviations:
+
+| Loss | Cost for large $u$ | Weight on the measurement |
+|:---|:---|:---|
+| Least squares | $u^2 / 2$ | 1 |
+| **Huber** | $k \lvert u \rvert - k^2/2$, for $\lvert u \rvert > k$ | $k / \lvert u \rvert$: smaller, but never zero |
+| **Cauchy** | $\tfrac{c^2}{2} \log\!\left(1 + (u/c)^2\right)$ | $1 / \left(1 + (u/c)^2\right)$: close to zero for large errors |
+
+The usual constants are $k = 1.345$ and $c = 2.3849$. They keep 95% of the accuracy of least squares when there are no outliers. The solver applies a loss by re-weighting each factor by its current weight and solving again. A measurement that disagrees with everything else ends up with a weight near zero, even if it looked fine when it arrived.
+
+In GTSAM, wrap the noise model: `noiseModel::Robust::Create(noiseModel::mEstimator::Cauchy::Create(c), pixelNoise)`.
+
+## 4.5 Try it: filter vs. smoother
+
+The widget uses the one-axis robot from [Kalman Filters §2.2](/docs/localization/kalman-filters#22-try-it-gain-and-uncertainty-over-time). Right after the gap in tags, a few bad measurements arrive, 1 to 2 m off, all to the same side, like a flipped single-tag solve. Three estimates are shown:
+
+- **Kalman filter**: the textbook filter, optionally with a 3σ gate ([Kalman Filters §2.5](/docs/localization/kalman-filters#25-what-a-kalman-filter-assumes)).
+- **Smoother, live**: the newest pose after re-solving the graph with each new measurement. This is what the robot would use while driving.
+- **Smoother, hindsight**: the whole trajectory, solved again at the end with every measurement. Useful for logs and analysis, not for driving.
+
+<FactorGraphSmoother />
+
+At the defaults (Cauchy loss, three bad measurements, no gate, no shove):
+
+| Setup | Kalman filter, RMS | Smoother live, RMS | Smoother hindsight, RMS |
+|:---|:---|:---|:---|
+| Least squares | 14.5 cm (worst 1.09 m) | 14.5 cm | 21.6 cm |
+| Huber | 14.5 cm | 8.0 cm (worst 72 cm) | 7.0 cm |
+| Cauchy | 14.5 cm | 4.0 cm (worst 26 cm) | 4.6 cm |
+| Cauchy, filter with 3σ gate | 3.6 cm | 4.0 cm | 4.6 cm |
+
+Things to try:
+
+- **Least squares.** The live smoother and the Kalman filter are identical, as [§4.1](#41-filtering-vs-smoothing) says. The hindsight solve is worse: without a robust loss, smoothing just spreads the bad measurements over the past.
+- **Cauchy.** The bad measurements end up with weights of 0.03 to 0.05. Three in a row still pull the live estimate by up to 26 cm, because right after the gap there is little to compare them with. The next good measurement outvotes them, and the solver undoes their effect within one step.
+- **Turn on the 3σ gate.** The filter now does as well as the smoother, or a little better. A simple gate is a good defense against outliers when the model is right.
+- **Set bad measurements to 0, keep the gate, and turn on the shove.** The gated filter rejects the good measurements after the shove, because they disagree with its prediction. Its RMS error rises to 18.6 cm. The live smoother gets 10.1 cm with Cauchy, and 7.9 cm with least squares. A robust loss also distrusts a real change at first, but it still listens a little, and many measurements in a row win.
+
+The lesson is not that smoothers always win. In one dimension with a good model, a gated Kalman filter is hard to beat. What a factor graph adds is room for more of the real problem: pixel measurements, the true capture time, extra unknowns, and robust losses that don't lock you out.
+
+## 4.6 GTSAM in practice
+
+GTSAM is a C++ library with Python bindings (`pip install gtsam`, version 4.3.0 as of September 2026). The parts used for localization:
+
+| Class | What it does |
+|:---|:---|
+| `NonlinearFactorGraph`, `Values` | The factors, and a guess for each variable |
+| `LevenbergMarquardtOptimizer` | Solves a whole graph from scratch (a **batch** solve) |
+| `ISAM2` | Incremental smoothing: adds new factors and re-solves only the parts they affect |
+| `BatchFixedLagSmoother`, `IncrementalFixedLagSmoother` | Keep only the last few seconds of poses, and fold older ones into a prior, so the graph doesn't grow all match |
+| `Marginals` | The covariance of any variable, from the solved graph |
+| `CustomFactor` | A factor whose residual you write in Python instead of C++ |
+
+### 4.6.1 From Java
+
+GTSAM has no official Java bindings. Team 100 has built Java bindings on Java's Foreign Function & Memory API, packaged as a WPILib vendordep, with an example robot project. The bindings are a bridge: Java builds the graph, and GTSAM's own C++ factors and solvers do the work.
+
+- [truher/gtsam-vendordep](https://github.com/truher/gtsam-vendordep), the vendordep
+- [truher/robot-with-gtsam](https://github.com/truher/robot-with-gtsam), a robot project that uses it in simulation
+- [Discussion on Chief Delphi](https://www.chiefdelphi.com/t/gtsam-using-java/518297), with progress updates and advice from WPILib developers
+
+<Callout type="warn" title="Community project, experimental">
+  As of September 2026, this is experimental work by Team 100, not an official WPILib or vendor library. It is aimed
+  at the 2027 control system (SystemCore) and needs Java 25. Expect the API to change.
+</Callout>
+
+The example localizer, in outline:
+
+```java
+NonlinearFactorGraph graph = new NonlinearFactorGraph();
+// Starting pose.
+graph.add(PriorFactor.PriorFactorPose2(Key.X(t0), startPose, priorNoise));
+// Odometry: the twist between two poses, from the swerve kinematics.
+graph.add(BetweenFactorPose2.newBetweenFactorPose2(Key.X(t0), Key.X(t1), Pose2.Expmap(twist), odometryNoise));
+// One factor per tag corner seen at time t1, with about 1 pixel of noise.
+graph.add(PlanarProjectionFactor1.newPlanarProjectionFactor1(Key.X(t1), cornerOnField, cornerPixels, cameraMount, calibration, pixelNoise));
+// Solve.
+Values result = new LevenbergMarquardtOptimizer(graph, initialGuess).optimize();
+Pose2 now = result.atPose2(Key.X(t1));
+```
+
+Things the Team 100 work ran into:
+
+- **Solve time varies** from one update to the next. Run the solver outside the main robot loop, in its own thread, and use the latest result.
+- **GTSAM and WPILib must be built with the same Eigen version** (the matrix library both use). Mixing versions in one program can break in confusing ways.
+- **Native memory** is freed when Java's garbage collector gets to it, which may be late.
+
+### 4.6.2 Building the graph
+
+1. **Make one pose variable per odometry sample**, keyed by its timestamp. At 50 Hz with a 1 s window, that is 50 poses.
+2. **Add an odometry factor between each pair**, from the twist. Its noise grows with the distance driven ([Basics §1.4](/docs/localization/basics#14-how-odometry-error-grows)).
+3. **Add a gyro factor on each pose**, with a small heading noise.
+4. **Add corner factors at the capture time.** If no pose exists at that exact time, add one there, with odometry factors to its neighbors. This is how the graph handles latency, with no replay.
+5. **Wrap vision noise models in a robust loss.** Keep the checks that are cheap and certain (off the field, wrong tag ID, too far) before the graph.
+6. **Update the smoother, and read the newest pose.** Pass it to the rest of the robot code. Read its covariance from `Marginals` if something needs to know how sure the estimate is.
+
+## 4.7 Which approach to use
+
+| Situation | Use |
+|:---|:---|
+| First season with vision, or limited time | WPILib's pose estimator with [good standard deviations and rejection](/docs/localization/wpilib-estimator#34-choosing-standard-deviations) |
+| The estimator works, but recovers too slowly or jitters | Tune gain and rate together ([§3.2.2](/docs/localization/wpilib-estimator#322-try-it-gain-rate-and-recovery)), and scale the vision standard deviations per measurement |
+| You need extra states, such as a turret angle or a game piece position | A custom EKF or UKF with WPILib's `ExtendedKalmanFilter` or `UnscentedKalmanFilter` |
+| You want pixel-level fusion, estimated gyro drift or camera mounts, or robust handling of bad tags, and have someone to maintain it | A factor graph with GTSAM |
+
+Whichever you choose, the quality of the inputs matters more than the estimator: [calibrated cameras](/docs/vision/calibration), correct timestamps, and odometry that doesn't slip.

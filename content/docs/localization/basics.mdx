@@ -1,0 +1,122 @@
+---
+title: Localization Basics
+description: Poses and WPILib's geometry classes, how odometry turns wheel and gyro readings into a pose, why the pose exponential matters, and how odometry error grows.
+---
+
+**Odometry** tracks the robot's pose by adding up its own movement. Every loop it reads the wheel encoders and the gyro, works out how far the robot moved, and adds that to the pose. This page covers how that works and where its errors come from. In short:
+
+1. **Use the gyro for heading.** WPILib's odometry already does. It is far better than heading worked out from the wheels.
+2. **Integrate with the pose exponential**, not with the heading at the start of each step. WPILib's `Pose2d.exp` does this for you.
+3. **Run odometry fast.** 250 Hz is much better than 50 Hz when the robot spins while it drives.
+4. **Expect drift anyway.** Odometry can't see a shove, and it has no way to correct itself. That is what vision is for ([Why Vision](/docs/vision/localization)).
+
+## 1.1 Poses and frames
+
+A **pose** is a position and a heading. On a flat field it is three numbers: $x$ and $y$ in meters, and the heading $\theta$ in radians. The heading is measured counterclockwise from the field's $+x$ axis.
+
+WPILib uses one **field frame** for both alliances. Its origin is the right-hand corner of the blue alliance wall, seen from the blue driver stations. $+x$ points toward the red alliance, $+y$ points left, and $+z$ points up. A red robot uses the same frame, so its starting poses have large $x$ values. Flip targets and paths for red, not the pose. [Pose Estimation §4.1](/docs/vision/pose-estimation#41-poses-frames-and-transforms) lists the other frames (robot, camera, tag) and how to convert between them.
+
+WPILib's geometry classes:
+
+| Class | Holds | Used for |
+|:---|:---|:---|
+| `Translation2d` | $x$, $y$ (m) | A position, or a vector between two positions |
+| `Rotation2d` | $\theta$ (rad) | A heading or a turn |
+| `Pose2d` | Translation and rotation | Where the robot is on the field |
+| `Transform2d` | Translation and rotation | A fixed offset, in the frame of the pose it is applied to. `pose.plus(new Transform2d(1, 0, turn))` moves 1 m forward from the robot's point of view, then turns. |
+| `Twist2d` | $dx$, $dy$ (m), $d\theta$ (rad) | A small movement along an arc, in the robot's own frame at the start of the movement. This is what odometry measures each loop. |
+
+Each has a 3D version (`Pose3d`, `Transform3d`, and so on) for poses that include height, roll, and pitch.
+
+## 1.2 Odometry, step by step
+
+Every loop, WPILib's odometry classes (such as `SwerveDriveOdometry`) do the following:
+
+1. **Read the sensors.** Each swerve module reports its total distance driven and its steering angle. The gyro reports the heading.
+2. **Find each module's movement.** Subtract the previous distance from the new one. Pair it with the module's steering angle to get a movement vector for each module.
+3. **Solve for the robot's movement.** This is **forward kinematics**. It gives a `Twist2d`: $dx$ forward, $dy$ left, and $d\theta$ turned, in the robot's frame.
+4. **Replace $d\theta$ with the gyro's change in heading.** The gyro measures turning much better than the wheels do.
+5. **Add the twist to the pose** with the pose exponential ([§1.3](#13-integrating-the-pose-exponential)).
+
+Step 3 is a small least-squares problem. If the robot moves by $(dx, dy)$ and turns by $d\theta$, a module at $(x_i, y_i)$ on the robot moves by
+
+$$
+\begin{bmatrix} dx - d\theta \cdot y_i \\ dy + d\theta \cdot x_i \end{bmatrix}
+$$
+
+Four modules give eight equations for three unknowns. They almost never agree exactly, because of noise and slip, so the kinematics finds the twist that fits them best. When one wheel slips badly, it no longer agrees with the others. Some teams use that disagreement to detect slip ([§1.5](#15-getting-better-odometry)).
+
+## 1.3 Integrating: the pose exponential
+
+Step 5 has a trap. The twist is in the robot's frame **at the start of the loop**, but the robot turned during the loop. The simplest approach rotates the twist by the heading at the start of the step and adds it to the pose. It is wrong in a way that adds up quickly.
+
+A robot that spins while it drives in a straight line is the worst case. While it turns, the wheels roll in directions that keep changing, relative to the robot. Rotating their sum by the start heading makes every step point slightly the wrong way, by about half the turn in that step. At 50 Hz and one turn per second, each step turns 7.2°, so every step is off by 3.6°. After 5 m, that is 30 cm sideways.
+
+WPILib's fix is the **pose exponential**, `Pose2d.exp(twist)`. It assumes the robot moved along an arc (constant speed and turn rate) during the step, and works out where that arc ends:
+
+$$
+\begin{bmatrix} \Delta x \\ \Delta y \end{bmatrix}_{\text{start frame}}
+=
+\begin{bmatrix} \dfrac{\sin d\theta}{d\theta} & -\dfrac{1 - \cos d\theta}{d\theta} \\[2ex] \dfrac{1 - \cos d\theta}{d\theta} & \dfrac{\sin d\theta}{d\theta} \end{bmatrix}
+\begin{bmatrix} dx \\ dy \end{bmatrix}
+$$
+
+Where:
+- $dx$, $dy$, $d\theta$ are the twist from the kinematics
+- $\Delta x$, $\Delta y$ is where the robot ended up, in the robot's frame at the start of the step. Rotate it by the start heading and add it to the pose.
+
+For small $d\theta$ the matrix is close to a rotation by $d\theta / 2$: the arc's average direction. So most of the fix is using the heading halfway through the step. The pose exponential adds a small length correction that makes it exact on an arc.
+
+<OdometryIntegration />
+
+At the defaults (a straight line at 4 m/s, spinning at 360°/s, odometry at 50 Hz):
+
+| Method | Error after 5 m, 50 Hz | Error after 5 m, 250 Hz |
+|:---|:---|:---|
+| Heading at the start of the step | 32 cm | 6.3 cm |
+| Pose exponential (WPILib) | 0.66 cm | 0.03 cm |
+
+The top view shows where each method thinks the robot is, with the true robot shaded. Both use the true heading, so the only difference is position.
+
+Things to try:
+
+- **Press Replay.** The drive plays in slow motion. The orange robot (start heading) slides steadily to the side of the true one, and the gap keeps growing. The pose exponential's robot stays on top of the true robot.
+- **Switch to Circle, and draw errors ×10.** The robot drives an arc, and the pose exponential is exact. The orange robot runs on a circle shifted from the true one, up to 8 cm away. Its error grows and shrinks as it goes around, instead of growing forever.
+- **Draw errors ×10 in the spinning case.** Now the pose exponential's small error shows too. A spinning swerve robot doesn't move along an arc, so the pose exponential is not exact here. It is 0.66 cm off after 5 m, tiny next to 32 cm.
+- **Raise the odometry rate.** Both methods get better. The start-heading error falls in proportion to the rate, and the pose exponential's with the square of the rate.
+- **Set the turn rate to 0.** The two methods agree. The problem only exists while the robot turns.
+
+The widget's encoders and gyro are perfect. On a real robot, noise and slip are much larger than the pose exponential's leftover error. The start-heading error is not. It is large enough to matter on its own.
+
+`ChassisSpeeds.discretize` fixes the same problem on the output side. It adjusts the commanded speeds so that a spinning robot drives the straight line you asked for. Odometry and control need the fix separately.
+
+## 1.4 How odometry error grows
+
+Odometry errors come in two kinds, and they grow at different rates.
+
+- **Random error** is different on every step: small slips, encoder noise, carpet texture. The step errors partly cancel, so the total grows with the **square root** of the distance driven. Four times the distance gives twice the error.
+- **Systematic error** (a bias) is the same on every step: a wheel diameter that is 2% too small, or a gyro that drifts. It doesn't cancel. A 2% wheel error is 2 cm per meter, forever.
+
+A heading error is the most damaging, because it turns into a sideways position error. With a heading error $\delta\theta$, every meter driven lands $\delta\theta$ meters to the side. At 1° (0.017 rad), that is 1.7 cm sideways per meter. Gyro drift makes it worse over time, because the heading error keeps growing while the robot keeps driving.
+
+[Why Vision §1.2](/docs/vision/localization#12-odometry-fast-smooth-and-drifting) lists the error sources and has a simulator of a full match. The main lesson from it: collisions dominate. A shove moves the robot without turning the wheels, or spins the wheels without moving the robot. No odometry can see that.
+
+### 1.4.1 Describing uncertainty
+
+To combine odometry with vision, the estimator needs to know how uncertain the pose is. For one number, the **standard deviation** $\sigma$ says how far off the value typically is. About 68% of errors are within $\pm\sigma$, and 95% within $\pm 2\sigma$, if the errors follow a bell curve (a **Gaussian**, or normal, distribution). The **variance** is $\sigma^2$.
+
+For a pose, there are three numbers, and their errors are linked. After a long drive with a small heading error, the robot is probably off to one side, and that sideways error goes with the heading error. The **covariance matrix** $P$ captures this. It is a 3×3 table: the variances of $x$, $y$, and $\theta$ on the diagonal, and how much each pair moves together off the diagonal. The [next page](/docs/localization/kalman-filters#23-more-than-one-number) uses it.
+
+## 1.5 Getting better odometry
+
+Better odometry means vision has less to fix, and the robot drives better when no tags are in view.
+
+1. **Measure the wheel diameter on the robot.** Drive a measured distance (5 m or more) and compare it with the odometry. Or spin in place several times. Each wheel should roll the gyro's turn (in radians) times the wheel's distance from the robot's center. Tread wears during an event, so check it again.
+2. **Trust the gyro for heading.** Mount it flat and firmly, and let it calibrate while the robot is still. Odometry uses the gyro's heading change ([§1.2](#12-odometry-step-by-step)), so a drifting gyro turns the whole path.
+3. **Run odometry faster than the main loop.** Read encoders and the gyro in a separate thread, with timestamps. CTRE's Phoenix 6 `SwerveDrivetrain` runs its odometry thread at 250 Hz on CAN FD (a CANivore) and 100 Hz on CAN 2.0 by default.
+4. **Limit slip.** Limit acceleration in the drive commands, and set a drive **stator** current limit (`StatorCurrentLimit`) below the point where the wheels break traction.
+5. **Detect slip and collisions.** Watch for modules that disagree with the kinematics fit, wheel rotation that doesn't match the gyro's turn, or spikes on the accelerometer. When they happen, trust odometry less for a moment, or trust the next vision measurement more.
+
+## 1.6 What's next
+
+Odometry is smooth but drifts. Vision is noisy but doesn't drift. [Kalman Filters](/docs/localization/kalman-filters) shows how to combine them, using the uncertainty of each to decide how much to trust it.

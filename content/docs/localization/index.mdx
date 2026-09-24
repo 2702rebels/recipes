@@ -1,0 +1,54 @@
+---
+title: Localization
+description: How a robot tracks its pose on the field. Odometry math, Kalman filters, WPILib's pose estimators, and factor graphs with GTSAM.
+---
+
+This section explains how a robot keeps track of its **pose**: where it is on the field and which way it faces. It starts with odometry, builds up to the Kalman filter, looks closely at what WPILib's pose estimators really do, and ends with factor graphs, the approach behind libraries such as GTSAM.
+
+The [Vision](/docs/vision) section explains where vision measurements come from. This section is about what to do with them. If you are new to both, read [Why Vision](/docs/vision/localization) first. It explains why odometry alone drifts and why vision fixes it.
+
+<Callout title="What you need">
+  High-school algebra. Page 2 uses a little probability (averages and standard deviations), and the later pages use
+  vectors and matrices. Each step is explained. Every page has an interactive widget.
+</Callout>
+
+## Where to start
+
+Read the pages in order. Each one builds on the one before.
+
+<Cards>
+  <Card
+    title="1. Localization Basics"
+    href="/docs/localization/basics"
+    description="Poses, how odometry turns wheel readings into a pose, the pose exponential, and how odometry error grows."
+  />
+  <Card
+    title="2. Kalman Filters"
+    href="/docs/localization/kalman-filters"
+    description="Keep a best guess and how uncertain it is. Predict with odometry, correct with vision, and know what the filter assumes."
+  />
+  <Card
+    title="3. WPILib Pose Estimators"
+    href="/docs/localization/wpilib-estimator"
+    description="What SwerveDrivePoseEstimator really does, what its standard deviations mean, latency compensation, and common bugs."
+  />
+  <Card
+    title="4. Factor Graphs and GTSAM"
+    href="/docs/localization/factor-graphs"
+    description="Solve for the whole recent trajectory at once. Tag corners in pixels, robust losses for bad measurements, and running GTSAM on a robot."
+  />
+</Cards>
+
+## Key ideas at a glance
+
+| Idea | One-line summary | Page |
+|:---|:---|:---|
+| Integrate along an arc | Turning each step's movement into field coordinates with the start heading is off by several centimeters per meter while spinning. WPILib's pose exponential is not. | [Basics](/docs/localization/basics#13-integrating-the-pose-exponential) |
+| Random error grows slowly, bias grows fast | Random odometry noise grows with the square root of distance. A wrong wheel diameter grows with distance. | [Basics](/docs/localization/basics#14-how-odometry-error-grows) |
+| Track the uncertainty | A Kalman filter keeps a variance next to the estimate, and uses it to decide how far each measurement moves the estimate. | [Kalman Filters](/docs/localization/kalman-filters#21-one-number-and-its-uncertainty) |
+| Gate bad measurements | Reject a measurement that is too many standard deviations from the prediction. It fails when the robot was really shoved. | [Kalman Filters](/docs/localization/kalman-filters#25-what-a-kalman-filter-assumes) |
+| WPILib's gain is fixed | Each vision measurement moves the estimate by $\sigma_s / (\sigma_s + \sigma_v)$ of the way, however long it has been since the last one. | [WPILib Estimators](/docs/localization/wpilib-estimator#321-the-gain) |
+| Rate matters as much as trust | More measurements per second pull harder, because the gain applies to every one. | [WPILib Estimators](/docs/localization/wpilib-estimator#322-try-it-gain-rate-and-recovery) |
+| Timestamps, in order | Use the capture time, in the right timebase, and add measurements oldest first. | [WPILib Estimators](/docs/localization/wpilib-estimator#33-latency-compensation) |
+| Smooth, don't just filter | A factor graph keeps the recent trajectory and re-solves it, so a later measurement can fix an earlier mistake. | [Factor Graphs](/docs/localization/factor-graphs#41-filtering-vs-smoothing) |
+| Measure in pixels | Tag corners as factors carry the true shape of vision uncertainty, instead of a guessed pose standard deviation. | [Factor Graphs](/docs/localization/factor-graphs#43-factors-for-an-frc-robot) |

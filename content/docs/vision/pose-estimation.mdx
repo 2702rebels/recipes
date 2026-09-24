@@ -271,8 +271,10 @@ A practical pipeline, from one camera frame to the pose estimator:
 3. **Chain the transforms.** Apply the camera mount to get ${}^{F}T_{R}$ (see [§4.1.2](#412-the-chain-from-camera-to-field)).
 4. **Sanity-check the result.** Reject poses outside the field, poses well above or below the floor, poses with large roll or pitch (the robot is flat on the floor), and poses that are too far from the tags to be trusted.
 5. **Set the standard deviations.** Scale them with the square of the distance to the tags, and shrink them as more tags are used. A common starting point is $\sigma_{xy} = \sigma_0 \cdot \bar{d}^{\,2} / n$, where $\bar{d}$ is the average tag distance and $n$ the number of tags. Tune $\sigma_0$ on the robot. Give heading a large standard deviation unless several tags were used.
-6. **Add the measurement with its capture time.** The estimator applies it at that moment and replays odometry since then (see [§1.4](/docs/vision/localization#14-fusing-odometry-and-vision)).
+6. **Add the measurement with its capture time.** The estimator applies it at that moment and replays odometry since then (see [§1.4](/docs/vision/localization#14-fusing-odometry-and-vision)). [WPILib Pose Estimators §3.3](/docs/localization/wpilib-estimator#33-latency-compensation) lists the timestamp mistakes to avoid.
 
-The formula in step 5 is a heuristic, not a law. It follows from [§4.3](#43-how-far-away-is-the-tag), but it ignores the tag angle, the ambiguity, and calibration errors. Check it against logged data from your robot.
+The formula in step 5 is a heuristic, not a law. It follows from [§4.3](#43-how-far-away-is-the-tag), but it ignores the tag angle, the ambiguity, and calibration errors. Check it against logged data from your robot. [WPILib Pose Estimators §3.2.1](/docs/localization/wpilib-estimator#321-the-gain) shows how these standard deviations turn into a gain.
+
+A factor graph can skip steps 2, 3, and 5. It takes the tag corners in pixels directly, and works out the pose and its uncertainty together with odometry (see [Factor Graphs §4.3](/docs/localization/factor-graphs#43-factors-for-an-frc-robot)).
 
 Every step here assumes the intrinsics $K$ and the lens distortion are right. [Camera Calibration](/docs/vision/calibration) covers what happens when they aren't.

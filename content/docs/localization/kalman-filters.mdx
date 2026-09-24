@@ -1,0 +1,112 @@
+---
+title: Kalman Filters
+description: How a Kalman filter blends odometry and vision. The one-number version, the matrix version, nonlinear filters, and what goes wrong when the filter's assumptions don't hold.
+---
+
+A **Kalman filter** keeps two things: a best guess of the state, and how uncertain that guess is. It updates both in two steps:
+
+1. **Predict.** Move the guess by what odometry measured. The uncertainty grows.
+2. **Correct.** When a measurement arrives, move the guess toward it. How far depends on how uncertain the guess is compared with the measurement. The uncertainty shrinks.
+
+[Why Vision §1.4](/docs/vision/localization#14-fusing-odometry-and-vision) introduced the correction step. This page adds the rest: how the uncertainty is tracked, what changes with more than one number, and what the filter assumes.
+
+## 2.1 One number and its uncertainty
+
+Take a robot on a line. The state is its position $\hat{x}$ (m), and the uncertainty is the variance $P$ (m²). Odometry reports a movement $u$ each loop, and vision sometimes reports a position $z$.
+
+**Predict** with each odometry reading:
+
+$$
+\hat{x} \leftarrow \hat{x} + u, \qquad P \leftarrow P + Q
+$$
+
+**Correct** with each vision measurement:
+
+$$
+K = \frac{P}{P + R}, \qquad \hat{x} \leftarrow \hat{x} + K\,(z - \hat{x}), \qquad P \leftarrow (1 - K)\,P
+$$
+
+Where:
+- $Q$ is the variance odometry adds over one step (m²). It is larger for longer steps.
+- $R$ is the variance of the vision measurement (m²), $\sigma_{\text{vision}}^2$.
+- $z - \hat{x}$ is the **innovation**: how far the measurement is from the prediction.
+- $K$ is the **gain**, between 0 (ignore the measurement) and 1 (jump to it).
+
+Variances add, standard deviations don't. Two independent errors of 3 cm and 4 cm combine to 5 cm, because $3^2 + 4^2 = 5^2$. That is why the filter works in variances.
+
+The correction always shrinks $P$. Blending two uncertain values gives a result that is more certain than either. With $P = R$, the gain is 0.5, and the estimate lands halfway between the prediction and the measurement, with half the variance.
+
+For this model, and when the noise really is Gaussian with the variances the filter was told, no other method gives a smaller average squared error. That is why the Kalman filter is the starting point for almost every estimator.
+
+## 2.2 Try it: gain and uncertainty over time
+
+The widget runs this filter on a robot that drives back and forth along a line for 20 s. From 6 s to 11 s, no tags are in view. The shaded band is $\pm 2\sigma$, where $\sigma = \sqrt{P}$ is the filter's own estimate of its error.
+
+<KalmanFilter1D />
+
+At the defaults (odometry noise 5 cm per √m, vision noise 10 cm, 10 measurements per second):
+
+- **The RMS error is 3.9 cm.** That is better than each vision measurement alone (10 cm), because the filter averages many measurements, connected by odometry.
+- **The gain settles at 0.21.** Each measurement moves the estimate about a fifth of the way.
+- **During the gap, the band widens** from 4.6 cm to 13.5 cm ($1\sigma$), as odometry runs on its own.
+- **The first measurement after the gap gets a gain of 0.65.** The filter knows it is uncertain, so it trusts the measurement much more. Within a second, the gain is back near 0.21.
+
+Things to try:
+
+- **Raise the vision noise to 30 cm.** The steady gain drops to 0.07, and the RMS error rises to 5.8 cm. Noisy measurements still help, just less.
+- **Drop to 2 measurements per second.** Each one gets more weight (a gain of 0.39), but the RMS error rises to 6.7 cm. The filter has less to average.
+- **Watch the time inside ±2σ.** It is about 95% or more. The filter is honest about its error, because it was given the true noise levels. A filter given the wrong ones is overconfident or too timid. [WPILib Pose Estimators](/docs/localization/wpilib-estimator#32-what-it-actually-does) shows what that costs.
+
+## 2.3 More than one number
+
+A robot pose has three numbers. The filter then keeps a **state vector** $\hat{\mathbf{x}} = [x, y, \theta]^\top$ and a 3×3 **covariance matrix** $P$ (see [Basics §1.4.1](/docs/localization/basics#141-describing-uncertainty)). The same two steps become matrix equations:
+
+$$
+\text{Predict:}\quad \hat{\mathbf{x}} \leftarrow f(\hat{\mathbf{x}}, \mathbf{u}), \qquad P \leftarrow F P F^\top + Q
+$$
+
+$$
+\text{Correct:}\quad K = P H^\top \left(H P H^\top + R\right)^{-1}, \qquad \hat{\mathbf{x}} \leftarrow \hat{\mathbf{x}} + K\,(\mathbf{z} - h(\hat{\mathbf{x}})), \qquad P \leftarrow (I - K H)\,P
+$$
+
+Where:
+- $f$ moves the state by the odometry twist $\mathbf{u}$ ([Basics §1.3](/docs/localization/basics#13-integrating-the-pose-exponential)), and $F$ is how a small change in the state changes the result
+- $h$ predicts the measurement from the state, and $H$ is how a small change in the state changes the prediction. For a vision pose, $h$ just returns the pose, and $H = I$.
+- $Q$ and $R$ are now covariance matrices, for odometry and for the measurement
+
+The matrix version can do one thing the one-number version can't. The off-diagonal entries of $P$ link errors in different numbers. After a long drive with an uncertain heading, $P$ records that a sideways error goes with a heading error. A vision measurement of position alone then corrects the heading too, because the filter knows that the two errors move together.
+
+## 2.4 Nonlinear filters
+
+Heading makes robot motion **nonlinear**. The same twist moves the robot in different field directions at different headings. The basic Kalman filter needs straight-line (linear) models, so there are two common extensions:
+
+- **Extended Kalman filter (EKF).** At each step, approximate $f$ and $h$ by straight lines around the current estimate. $F$ and $H$ become **Jacobians**: tables of how much each output changes per unit of each input. It is simple and fast, and works well when the errors are small compared with how curved the model is.
+- **Unscented Kalman filter (UKF).** Instead of a straight-line approximation, push a few carefully chosen sample states (**sigma points**) through the real $f$ and $h$, and measure the spread of the results. It handles stronger nonlinearity, at a little more cost.
+
+WPILib has both, plus the linear filter: `KalmanFilter`, `ExtendedKalmanFilter`, and `UnscentedKalmanFilter` in `edu.wpi.first.math.estimator`. They are general tools for your own models, for example a flywheel's speed or an elevator's position. For the robot pose, most teams use WPILib's pose estimators instead, which are covered on the [next page](/docs/localization/wpilib-estimator).
+
+## 2.5 What a Kalman filter assumes
+
+A Kalman filter is only as good as its assumptions. The important ones:
+
+| Assumption | What breaks it on a robot | What happens |
+|:---|:---|:---|
+| Noise is Gaussian, with no large outliers | A [flipped single-tag solve](/docs/vision/pose-estimation#443-the-planar-ambiguity), a misread tag, glare | One bad measurement pulls the estimate by $K$ times its error. Right after a gap, $K$ is large, so the pull is large. |
+| $Q$ and $R$ are right | Guessed standard deviations, noise that grows with distance | Too small: overconfident, jumpy, slow to recover. Too large: sluggish. |
+| The motion model is right | A shove, wheel slip, a bump | The filter is confident and wrong. It treats the good measurements that follow as surprising. |
+| Measurements are independent | Two cameras seeing the same tag, calibration errors | The same error counted twice. The filter becomes overconfident. |
+| Measurements arrive in time order | Camera latency of tens of milliseconds | A delayed measurement is applied to the wrong pose, and pulls the robot back toward where it was. |
+
+The usual fix for outliers is a **gate**: skip any measurement whose innovation is too large for the filter's own uncertainty. A common choice is 3 standard deviations:
+
+$$
+\left| z - \hat{x} \right| > 3\sqrt{P + R} \quad\Rightarrow\quad \text{reject}
+$$
+
+A gate works well until the model is wrong. After a shove the wheels didn't see, every good measurement looks like an outlier, and the gate rejects them. The filter only recovers once $P$ has grown enough for the gate to open. [Factor Graphs §4.5](/docs/localization/factor-graphs#45-try-it-filter-vs-smoother) shows this happening, and a different way to handle outliers.
+
+Delayed measurements need **latency compensation**: apply the measurement at the time the image was captured, then redo the odometry since then. WPILib's pose estimators do this ([§3.3](/docs/localization/wpilib-estimator#33-latency-compensation)).
+
+## 2.6 What's next
+
+[WPILib Pose Estimators](/docs/localization/wpilib-estimator) looks at the estimator most FRC teams use. It is built from these ideas, but it is simpler than a full Kalman filter in ways that matter when you tune it.

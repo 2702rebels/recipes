@@ -78,7 +78,7 @@ Two details matter in practice:
 - **Heading usually comes from the gyro.** A gyro measures heading very well over the length of a match. Vision heading from a single tag is poor (see [§4.5](/docs/vision/pose-estimation#45-many-tags-one-solve)). Many teams give vision a very large heading standard deviation, so it corrects only $x$ and $y$.
 - **Latency compensation.** The estimator keeps a short history of odometry. When a measurement arrives, it is applied at the time the image was captured, and the odometry since then is replayed on top. Without this, a moving robot is pulled toward where it used to be.
 
-WPILib's pose estimators (such as `SwerveDrivePoseEstimator`) do both. `addVisionMeasurement(pose, timestamp, stdDevs)` takes the vision pose, the capture time, and the standard deviations.
+WPILib's pose estimators (such as `SwerveDrivePoseEstimator`) do both. `addVisionMeasurement(pose, timestamp, stdDevs)` takes the vision pose, the capture time, and the standard deviations. They use a simpler, fixed gain instead of the one above. [WPILib Pose Estimators](/docs/localization/wpilib-estimator#321-the-gain) explains the difference, and [Kalman Filters](/docs/localization/kalman-filters) covers the full filter.
 
 ## 1.5 Try it: one match of driving
 
@@ -99,3 +99,5 @@ The widget leaves out latency, motion blur, and bad measurements. A real estimat
 ## 1.6 What's next
 
 Before going into the math, decide what you want the camera to tell you: where a target is **relative** to the robot, or where the robot is on the **whole field**. That choice is the topic of [Relative vs. Global Positioning](/docs/vision/positioning).
+
+The [Localization](/docs/localization) section covers the estimator side in depth: odometry math, Kalman filters, WPILib's pose estimators, and factor graphs.

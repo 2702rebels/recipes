@@ -36,6 +36,7 @@ lib/turret-sim.ts        Pure step-response simulation used by the tuning sandbo
 lib/procedures.ts        Index of tuning procedures (anchors) for the index page and jump links.
 lib/vision.ts            Camera projection and PnP solver (homography + Levenberg-Marquardt) for the Vision pages.
 lib/vision-sims.ts       Monte Carlo and sweep scenarios built on lib/vision.ts. lib/odometry-sim.ts is the drift sim.
+lib/localization-sim.ts  Odometry integration, 1-D Kalman filter, WPILib estimator, and factor-graph smoother for the Localization pages.
 app/                     Next.js routes: landing page, docs layout, search index.
 source.config.ts         Global MDX plugins (remark-math, rehype-katex).
 .github/workflows/       deploy.yml builds and publishes to GitHub Pages on push to main.
@@ -61,6 +62,8 @@ These rules apply to all prose: pages, callouts, component labels and captions, 
 - **Don't overstate torque-current mode.** It is still limited by supply voltage and back-EMF. Current limits apply in both output families.
 - **Vision pages stay implementation-neutral.** Explain concepts and math, and don't document specific off-the-shelf vision products. The team's own pipeline is covered separately. WPILib and OpenCV APIs are fine to name.
 - **Name the frame and axis convention.** Field and robot frames use WPILib axes (x forward, y left, z up). Camera frames use OpenCV axes (x right, y down, z forward). Vision numbers must come from `lib/vision.ts` and its `DEFAULT_CAMERA` (1280×800, 70°) and be recomputed if those change.
+- **Verify WPILib claims against the source for the season's release**, for example `allwpilib` at tag `v2026.2.2`, not `main`. `main` is the next season's code, with renamed packages. The Localization pages describe `PoseEstimator.java` in detail (fixed gain, 1.5 s buffer, clamped timestamps), so recheck them when WPILib changes it.
+- **Label community projects as such.** Name them, link them, and date their status ("experimental as of September 2026"). Don't present them as official WPILib or vendor features.
 - **Say which current you mean.** Whenever a current, current limit, or current reading appears (in prose, tables, widget labels, readouts, axes, legends, and captions), state whether it is **stator** (motor winding) current or **supply** (battery) current, unless the context makes it unambiguous. Name the matching config where it helps: `StatorCurrentLimit`, `SupplyCurrentLimit`, or `PeakForwardTorqueCurrent` / `PeakReverseTorqueCurrent` (which cap stator current in torque-current mode). The two differ a lot at low speed, where supply current is much lower than stator current.
 
 ## MDX conventions

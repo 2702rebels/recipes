@@ -3,7 +3,7 @@ import { TAG_PATTERN } from "@/lib/vision";
 import type { ReactNode } from "react";
 
 /** Figure frame shared by the static diagrams: a bordered card with a caption. */
-const Figure = ({ caption, children }: { caption: ReactNode; children: ReactNode }) => (
+export const Figure = ({ caption, children }: { caption: ReactNode; children: ReactNode }) => (
   <figure className="not-prose my-6 rounded-xl border border-fd-border bg-fd-card p-4">
     {children}
     <figcaption className="mt-2 text-center text-xs text-fd-muted-foreground">{caption}</figcaption>

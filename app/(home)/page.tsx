@@ -1,4 +1,4 @@
-import { BookOpen, Camera, Gauge, GraduationCap } from "lucide-react";
+import { BookOpen, Camera, Gauge, GraduationCap, LocateFixed } from "lucide-react";
 import Link from "next/link";
 
 import type { ReactNode } from "react";
@@ -21,6 +21,12 @@ const SECTIONS: { title: string; href: string; description: string; icon: ReactN
     href: "/docs/vision",
     description: "How a robot finds itself on the field with a camera: AprilTags, PnP solving, and calibration.",
     icon: <Camera className="size-5" />,
+  },
+  {
+    title: "Localization",
+    href: "/docs/localization",
+    description: "How a robot tracks its pose: odometry, Kalman filters, WPILib's pose estimators, and factor graphs.",
+    icon: <LocateFixed className="size-5" />,
   },
   {
     title: "Training",

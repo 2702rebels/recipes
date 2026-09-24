@@ -101,9 +101,13 @@ Interactive widgets live in `components/interactive/`. The current set:
 | `PoseScatter` | [Pose Estimation](/docs/vision/pose-estimation#45-many-tags-one-solve) | How corner noise spreads the solved pose, for one or two tags, with and without gyro heading. Top-down scene of the camera and tags, with a zoomed inset |
 | `DistortionGrid` | [Calibration](/docs/vision/calibration#51-what-calibration-measures) | What radial distortion does to straight lines |
 | `CalibrationError` | [Calibration](/docs/vision/calibration#53-how-calibration-errors-become-pose-errors) | Pose error from wrong focal length, principal point, or ignored distortion. Top-down view of the true and estimated robot as it drives toward a tag |
+| `OdometryIntegration` | [Localization Basics](/docs/localization/basics#13-integrating-the-pose-exponential) | Odometry error from integrating with the start heading or the pose exponential, at different update rates. Animated top-down view of the true robot and each estimate, with errors drawn to scale or ×10 |
+| `KalmanFilter1D` | [Kalman Filters](/docs/localization/kalman-filters#22-try-it-gain-and-uncertainty-over-time) | How a Kalman filter's gain and ±2σ band change with noise, measurement rate, and a gap in tags |
+| `EstimatorGain` | [WPILib Pose Estimators](/docs/localization/wpilib-estimator#322-try-it-gain-rate-and-recovery) | WPILib's fixed gain next to a Kalman filter: noise, measurement rate, and recovery from a shove |
+| `FactorGraphSmoother` | [Factor Graphs](/docs/localization/factor-graphs#45-try-it-filter-vs-smoother) | A Kalman filter, a live smoother, and the hindsight trajectory, with robust losses, bad measurements, a gate, and a shove |
 | `RollingShutter` | [Calibration](/docs/vision/calibration#56-rolling-vs-global-shutter) | A tag captured by a rolling or global shutter while the robot turns or drives, with the skew, blur, and pose errors that follow |
 
-Static diagrams that are not interactive live in `components/diagrams/` (for example `FrameChain` and `AprilTagAnatomy` on the Vision pages). They are server components, drawn as inline SVG with the same theme tokens.
+Static diagrams that are not interactive live in `components/diagrams/` (for example `FrameChain` and `AprilTagAnatomy` on the Vision pages, and `FactorGraphDiagram` on the Factor Graphs page). They are server components, drawn as inline SVG with the same theme tokens.
 
 To add a new one:
 

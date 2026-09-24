@@ -1,0 +1,132 @@
+---
+title: WPILib Pose Estimators
+description: What SwerveDrivePoseEstimator really does. The fixed gain behind its standard deviations, why the measurement rate matters, latency compensation, choosing standard deviations, and common bugs.
+---
+
+WPILib's pose estimators (`SwerveDrivePoseEstimator`, `DifferentialDrivePoseEstimator`, `MecanumDrivePoseEstimator`, and their `3d` versions) are what most FRC teams use. They run odometry and nudge it toward each vision measurement. What to know before tuning one:
+
+1. **It is not a full Kalman filter.** It doesn't track how uncertain it is. Each measurement moves the estimate a **fixed fraction** of the way toward it: $K = \sigma_s / (\sigma_s + \sigma_v)$ per axis.
+2. **Only the ratio of the two standard deviations matters**, and the gain applies to every measurement. Doubling the measurement rate pulls about twice as hard.
+3. **Pass the capture time** of each image, in the estimator's timebase, and add measurements oldest first.
+4. **Reject bad measurements yourself** before adding them. The estimator has no outlier check.
+
+Everything on this page was checked against the WPILib 2026 source (`PoseEstimator.java` at `v2026.2.2`).
+
+## 3.1 Setup
+
+```java
+SwerveDrivePoseEstimator estimator = new SwerveDrivePoseEstimator(
+    kinematics,
+    gyro.getRotation2d(),
+    getModulePositions(),
+    startingPose,
+    VecBuilder.fill(0.1, 0.1, 0.1),  // state std devs: x, y (m), heading (rad)
+    VecBuilder.fill(0.9, 0.9, 0.9)); // vision std devs: x, y (m), heading (rad)
+
+// Every loop:
+estimator.update(gyro.getRotation2d(), getModulePositions());
+
+// For each vision result, oldest first:
+estimator.addVisionMeasurement(visionPose, captureTimestampSeconds, visionStdDevs);
+
+// Anywhere:
+Pose2d pose = estimator.getEstimatedPosition();
+```
+
+The two sets of standard deviations above are also the defaults if you leave them out. The standard deviations passed to `addVisionMeasurement` stay in effect for later measurements until you pass new ones.
+
+CTRE's Phoenix 6 `SwerveDrivetrain` has its own pose estimator, on its odometry thread, with the same methods (`addVisionMeasurement`, `setVisionMeasurementStdDevs`, `samplePoseAt`, `resetPose`). Its timestamps use a different timebase ([§3.3](#33-latency-compensation)).
+
+## 3.2 What it actually does
+
+1. **`update` runs odometry** ([Basics §1.2](/docs/localization/basics#12-odometry-step-by-step)) and stores each odometry pose, with its time, in a buffer that holds the last **1.5 s**.
+2. **`addVisionMeasurement` looks up the estimate at the capture time**, from the buffer and the corrections made so far.
+3. **It finds the difference** between the vision pose and that estimate, as a `Transform2d` in the robot's frame at that time: forward, left, and turn.
+4. **It scales each of the three by a fixed gain** and records the scaled correction.
+5. **It applies the correction to the current pose.** Odometry since the capture time is kept, and shifted by the correction.
+
+So the estimate is odometry plus the latest correction. There is no covariance matrix and no predict step. How long the robot has driven since the last measurement makes no difference.
+
+### 3.2.1 The gain
+
+For each axis, the gain is set from the state standard deviation $\sigma_s$ and the vision standard deviation $\sigma_v$:
+
+$$
+K = \frac{q}{q + \sqrt{q\,r}} = \frac{\sigma_s}{\sigma_s + \sigma_v}, \qquad q = \sigma_s^2,\; r = \sigma_v^2
+$$
+
+The source describes it as the closed-form gain of a continuous-time Kalman filter with no dynamics. In practice, think of it as a fixed blend factor. Some values:
+
+| State std dev | Vision std dev | Gain per measurement |
+|:---|:---|:---|
+| 0.1 | 0.9 (defaults) | 0.10 |
+| 0.1 | 0.3 | 0.25 |
+| 0.1 | 0.1 | 0.50 |
+| 0.05 | 0.9 | 0.05 |
+| 0.1 | 9999 | about 0 (ignore vision for this axis) |
+
+What follows from the formula:
+
+- **Only the ratio matters.** 0.1 and 0.9 behave exactly like 1 and 9. The numbers are not really meters.
+- **The gain is per measurement.** Each measurement removes the fraction $K$ of the remaining error. After $n$ measurements, $(1-K)^n$ of an error is left. Ten measurements per second with $K = 0.1$ remove 90% of an error in 2.2 s. Twenty per second take half as long. A second camera that sees the same tags doubles the pull, and so does a higher camera frame rate.
+- **It doesn't change after a gap.** A Kalman filter trusts the first measurement after a long gap much more ([Kalman Filters §2.2](/docs/localization/kalman-filters#22-try-it-gain-and-uncertainty-over-time)). The WPILib estimator gives it the same gain as any other. That makes it slower to recover, but also harder to fool with one bad measurement.
+- **Scaling the vision standard deviation has a gentler effect than in a Kalman filter.** For small gains, $K \approx \sigma_s / \sigma_v$. Making $\sigma_v$ grow with distance squared ([Pose Estimation §4.6](/docs/vision/pose-estimation#46-from-solution-to-robot-pose)) makes the gain fall with distance squared. In a Kalman filter the gain would fall with distance to the fourth power, because it uses variances.
+- **The x and y gains apply along the robot's forward and left axes**, not the field's, because the difference in step 3 is in the robot's frame. Use the same value for both unless you mean it.
+
+### 3.2.2 Try it: gain, rate, and recovery
+
+The widget runs the WPILib estimator in one dimension, next to a Kalman filter that knows the true noise (10 cm). At 8 s the robot is shoved 50 cm. The wheels don't see it, so neither estimator knows until vision tells it.
+
+<EstimatorGain />
+
+At the defaults (0.1 and 0.9, 10 measurements per second):
+
+| | WPILib estimator | Kalman filter |
+|:---|:---|:---|
+| Gain | 0.10, always | 0.21 when settled, higher after a surprise |
+| RMS error before the shove | 4.2 cm | 4.0 cm |
+| Time to get back within 10 cm after the shove | 1.25 s | 0.65 s |
+
+Things to try:
+
+- **Set the vision std dev to 0.1.** The gain is 0.5. It recovers from the shove in 0.2 s, but the RMS error before the shove rises to 6.4 cm, because each noisy measurement moves the estimate a lot.
+- **Set the vision std dev to 0.3.** The gain is 0.25. Recovery is faster than the Kalman filter (0.5 s), and the error is a little higher (4.6 cm). A fixed gain has to choose between smooth and quick. A Kalman filter gets closer to both, because its gain rises only when it is surprised.
+- **Drop to 5 measurements per second.** Recovery takes 3.9 s at the same settings. Then try 20 per second: 0.8 s, and less noise too.
+- **Set the state std dev to 0.05.** The gain halves, and recovery takes 3.4 s. Lowering the state standard deviation is the same as raising the vision one.
+
+## 3.3 Latency compensation
+
+A vision result arrives tens of milliseconds after the image was taken. The estimator handles this, as long as you give it the right timestamp.
+
+1. **Pass the capture time, not the time the result arrived.** Most vision systems report either the capture time or the total latency. Subtract the latency from the time the result was received.
+2. **Use the estimator's timebase.** WPILib's estimators use the FPGA timestamp (`Timer.getFPGATimestamp()`) unless you call `updateWithTime` with your own clock. CTRE's `SwerveDrivetrain` uses `Utils.getCurrentTimeSeconds()`. Convert an FPGA time with `Utils.fpgaToCurrentTime`.
+3. **Add measurements oldest first.** When a measurement is added with a capture time before an earlier correction, the estimator throws away every correction made after that time. With two cameras, collect the results each loop, sort them by capture time, and then add them.
+4. **Don't expect it to use old measurements.** Measurements more than 1.5 s older than the newest odometry sample are silently ignored. So are measurements added before the first `update`.
+
+A wrong timestamp doesn't cause an error. A capture time newer than the newest odometry sample is treated as that sample, so a time in the future is applied to the current pose. The only sign is that a moving robot's estimate lags behind or jumps ahead. Log both the capture time and the current time, and check the difference on the robot.
+
+## 3.4 Choosing standard deviations
+
+1. **Start with the defaults** (0.1 state, 0.9 vision) and check that the pose looks sane in a log viewer while you drive past tags.
+2. **Scale the vision standard deviation per measurement.** Grow it with the square of the average tag distance, and shrink it with the number of tags. [Pose Estimation §4.6](/docs/vision/pose-estimation#46-from-solution-to-robot-pose) gives a starting formula.
+3. **Choose the heading standard deviation separately.** For single-tag results, set it very large so that vision doesn't turn the heading, and let the gyro own it. For multi-tag results, a moderate value lets vision slowly correct gyro drift.
+4. **Reject bad measurements before adding them.** Use the checks in [Pose Estimation §4.6](/docs/vision/pose-estimation#46-from-solution-to-robot-pose): off the field, off the floor, tilted, too far, high ambiguity. WPILib's own documentation suggests also skipping measurements more than about 1 m from the current estimate. Be careful with that one: after a big shove, it rejects the measurements you need. Reset from vision instead when many measurements in a row agree with each other but not with the estimate.
+5. **Account for the rate.** If you add a camera or raise its frame rate, the estimator trusts vision more. Raise the vision standard deviations to keep the same behavior.
+6. **Check against known positions.** Put the robot on marked spots on the field, and compare the estimate with the tape measure. Replay logged matches after changing values.
+
+## 3.5 Resetting the pose
+
+- **At the start of autonomous**, reset to the path's starting pose with `resetPose` (or `resetPosition`, which also takes the gyro angle and module positions). The estimator offsets the gyro internally, so don't reset the gyro separately.
+- **Before a match**, the robot often sits still with tags in view. Some teams reset from a multi-tag vision pose then. It removes any error in placing the robot.
+- **After a reset**, the buffer is cleared. A measurement captured just before the reset is not ignored. It is applied to the first pose after the reset, as if it were new. Drop results captured before the reset.
+
+## 3.6 Where it falls short
+
+The WPILib estimator is simple, fast, and good enough for most teams. Its limits:
+
+- **Fixed gain.** It can't be both smooth and quick to recover ([§3.2.2](#322-try-it-gain-rate-and-recovery)).
+- **The measurement is a whole pose, with one standard deviation per axis.** The real uncertainty of a vision pose is not shaped like that. It is long along one direction and narrow along another, and it depends on where the tags are (see the scatter in [Pose Estimation §4.5](/docs/vision/pose-estimation#45-many-tags-one-solve)).
+- **No outlier handling**, beyond what you do before calling it.
+- **No second opinion.** Once a correction is made, it is never revisited, even when later measurements show it was wrong.
+
+[Factor Graphs and GTSAM](/docs/localization/factor-graphs) removes these limits, at the cost of a lot more complexity.
