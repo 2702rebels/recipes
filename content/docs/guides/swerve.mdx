@@ -1,0 +1,130 @@
+---
+title: Swerve Tuning
+description: Team 2702's procedure for tuning a CTRE swerve drive on the carpet. Steer gains, drive gains, slip current, and wheel radius.
+---
+
+This page is the team's own procedure, not general learning material. It assumes a drivetrain made with the Tuner X Swerve Project Generator, so the gains live in `steerGains` and `driveGains` in `TunerConstants`. Our default is **torque-current for drive and voltage for steer** ([§4.3](/docs/guides/ctre/selection#43-mixed-mode-strategies) explains why). Both families work for either motor.
+
+Work in this order. Each step depends on the ones before it.
+
+1. [Steer gains](#52-steer-motors)
+2. [Drive kS and kP](#53-drive-motors)
+3. [Slip current](#54-slip-current)
+4. [Wheel radius](#55-wheel-radius)
+
+<Callout type="warn" title="Always tune on the carpet, at competition weight">
+  Put the battery and bumpers on. A robot on blocks behaves very differently: the steer motors turn the modules with
+  no tread scrub, and the drive motors spin wheels with no robot to push. Gains tuned in the air are wrong on the floor.
+</Callout>
+
+<PrintProcedures />
+
+## 5.1 Before You Start
+
+- **Know the units.** Steer gains act on *azimuth* rotations (after the steer gear ratio). Drive gains act on *rotor* rotations (before the drive gear ratio). A drive kP of 9 means 9 A of stator current per rotor rotation/s of error.
+- **Set the output families.** `kSteerClosedLoopOutput` and `kDriveClosedLoopOutput` in `TunerConstants` pick Volts or Amps for each motor. Every gain changes meaning when you change them, so re-tune after switching.
+- **Use closed-loop drive requests.** The drive gains only act when a request uses `DriveRequestType.Velocity`. CTRE's default is `OpenLoopVoltage`, which ignores them. Our drivetrain sets `Velocity` on every request.
+- **Log what you tune.** For each motor, plot `ClosedLoopReference`, the measured position or velocity, and the output (`MotorVoltage` for voltage, `TorqueCurrent` for torque-current). Tuner X plots one device live. AdvantageScope shows all four modules from a log.
+
+## 5.2 Steer Motors
+
+Tune one module, then copy its gains to the others. The modules are identical, so one set of steer gains fits all four.
+
+**Why the carpet matters here.** On the floor, the tread scrubs against the carpet whenever the module turns. That adds a lot of friction. A module in the air turns almost freely, so gains tuned there leave the module slow, or short of its target, on the floor.
+
+### 5.2.1 Tuning Procedure
+
+<Procedure mechanism="Swerve steer" mode="voltage">
+
+1. **Put the robot on the carpet** at competition weight, with room around the module you'll test.
+2. **Start from the generator's gains.** The Tuner X generator writes a kS and kV for the steer motor, and a kP and kD to start from. Leave kS and kV alone for now and keep `StaticFeedforwardSign` at `UseClosedLoopSign`. The steer motor uses a plain `Position` request by default, which has no velocity reference ([§1.2.1](/docs/guides/ctre/foundation#121-the-staticfeedforwardsign-config)).
+3. **Command the module between 0° and 90°** from Tuner X: 0 and 0.25 azimuth rotations, with a `PositionVoltage` request on slot 0 (the request the drivetrain uses). Make sure no robot code (such as the drivetrain's default command) is commanding the same motor at the same time.
+4. **Raise kP until the module snaps to each target.** Watch the plot. It should reach 90° quickly and stop there. Keep raising kP until it starts to overshoot or buzz, then back off.
+5. **Add kD only if it overshoots.** In voltage mode, back-EMF damps the loop for you ([§3.0.3](/docs/guides/ctre/torque-current#torque-mode-has-no-built-in-damping)), so kD can be small or zero. Use a small value to trim overshoot. The generator's kD is about 1/200 of its kP.
+6. **Check small moves too.** Command 0° to 10° and back. If the module stops short of small targets, raise kS a little until it doesn't. Too much kS makes the module chatter at rest.
+7. **Copy the gains to `steerGains`** in `TunerConstants`, deploy, and drive. The wheels should turn crisply and without jitter when you change direction.
+
+</Procedure>
+
+**If you use torque-current for steer.** Nothing damps the loop but friction, so kP alone oscillates. kD is required, and kP and kD have to be tuned together, stepping each in turn. Expect kD to be 1/30 to 1/10 of kP. [§3.2.3](/docs/guides/ctre/torque-current#323-tuning-procedure) (the turret) is the same kind of loop.
+
+## 5.3 Drive Motors
+
+In torque-current mode, only two drive gains need tuning: **kS and kP**.
+
+- **kV is about zero.** In torque mode, kV only covers drag that grows with speed, which is tiny for a drive motor. The current loop has already removed back-EMF.
+- **kA stays at zero** unless you feed commanded accelerations or wheel forces to the modules.
+- **kD is rarely needed.** Current sets how fast the wheel accelerates. So kP pushes the speed toward the target harder the further off it is, and the loop settles without overshoot on its own. kD would act on measured acceleration, which is noisy on carpet. The robot's mass also smooths out the motion.
+
+This is why we find torque-current easier for drive than voltage. In voltage mode, kV and kA carry most of the load and need SysId or careful tuning.
+
+**Tune by spinning the robot in place.** With the robot rotating and not translating, all four modules point at 45° (on a square frame) and every wheel runs at the same speed. You don't need an open field, you don't have to chase the robot, and you can accelerate, hold a speed, and slow down as often as you like.
+
+### 5.3.1 Tuning Procedure
+
+<Procedure mechanism="Swerve drive" mode="torque">
+
+1. **Set kP, kI, kD, kV, and kA to 0** in `driveGains`.
+2. **Find kS.** Command a slow rotation in place (for example, a light touch on the rotation stick). With kP at 0, the drive output is just kS in the direction of motion. Raise kS in small steps until the robot starts to turn, then back off by about 10%. Too much kS makes the robot creep and jitter near zero speed.
+3. **Set a small kP,** about 1 A per rotor rotation/s.
+4. **Spin in place and compare.** Rotate at a few speeds. Speed up, hold, and slow down. For each drive motor, compare the measured velocity with `ClosedLoopReference`.
+5. **Double kP until the wheels track.** Measured velocity should follow the reference closely when speeding up, holding, and slowing down. Stop when the motors start to buzz or the velocity oscillates, and go back to the last good value.
+6. **Add kD only if the velocity overshoots after a speed change** and more kP doesn't fix it. We have not needed it.
+7. **Drive the robot.** It should hold its speed and feel the same at low and high speed. If it jitters at low speed, lower kS.
+
+**Our 2026 robot** (4.71:1 drive ratio) ended at kS = 4.5 A and kP = 9 A per rotor rotation/s. [Community reports on Chief Delphi](https://www.chiefdelphi.com/t/tuning-torquefoc-drive-on-ctre-swerve-using-velocity-gains/507900) land around kS = 2–2.5 A and kP = 10 A per rotor rotation/s. Your kS depends on the gearbox, treads, and robot weight.
+
+</Procedure>
+
+**If you use voltage for drive,** kV does most of the work. Run SysId (CTRE's `SysIdSwerveTranslation` request), use its kS, kV, and kA, then add a small kP. The Tuner X generator's defaults (kS = 0, kV = 0.124 V per rotor rotation/s, kP = 0.1) are a reasonable start.
+
+## 5.4 Slip Current
+
+The slip current is the **stator** current at which the wheels start to slip on the carpet. `kSlipCurrent` in `TunerConstants` sets it, and the swerve API uses it as the drive motors' `StatorCurrentLimit` and, in torque-current mode, as `PeakForwardTorqueCurrent` / `PeakReverseTorqueCurrent`. A value that is too high lets the wheels spin out when the robot pushes or accelerates hard. A value that is too low gives away pushing force.
+
+<Procedure
+  title="Measuring the slip current"
+  mechanism="Swerve drive">
+
+1. **Push the robot square against an immovable wall** on carpet, with every module pointed at the wall.
+2. **Slowly ramp the drive output** on all four drive motors. For torque-current, ramp the torque current (the robot code has a `SysIdSwerveTranslationTorqueCurrent` request for this). For voltage, ramp the voltage.
+3. **Watch drive velocity and stator current together.** Velocity stays near zero while the treads grip. The stator current at the moment velocity jumps is the slip current.
+4. **Set `kSlipCurrent` a little below that value.** Our 2026 robot uses 80 A.
+
+</Procedure>
+
+## 5.5 Wheel Radius
+
+Odometry turns wheel rotations into distance using `kWheelRadius`. Treads compress under the robot's weight and wear over a season, so the real radius is a little smaller than the nominal one. A 2% error in radius is a 2% error in every distance the robot drives. Measure it rather than trusting the wheel's spec.
+
+The robot code has a `WheelDiameterCharacterization` command for this, based on Team 6328's approach. It reports a **radius**, despite the name.
+
+**How it works.** The command spins the robot slowly in place. Each wheel then rolls along a circle around the robot's center, whose radius $R$ is the distance from the center to a module (from the module positions in `TunerConstants`). The gyro measures how far the robot has turned, $\theta$. The drive encoders measure how far each wheel has turned, $\phi$, in radians. Rolling without slipping means
+
+$$
+r \cdot \phi = R \cdot \theta \quad \Rightarrow \quad r = \frac{R \cdot \theta}{\phi}
+$$
+
+The command averages $\phi$ over the four wheels. The result doesn't depend on the current `kWheelRadius`, only on the gyro, the encoders, and the module positions. So the module positions in `TunerConstants` must be right.
+
+<Procedure
+  title="Measuring the wheel radius"
+  mechanism="Swerve drive">
+
+1. **Tune the drive first** ([§5.3](#53-drive-motors)). The command drives through the normal velocity loop.
+2. **Enable the bindings.** Set `Constants.Settings.sysIdBindings = true` and deploy. The command is bound to the driver controller: hold D-pad left to spin counterclockwise and D-pad right to spin clockwise.
+3. **Put the robot on the carpet** at competition weight, with room to spin in place.
+4. **Hold the D-pad for at least three full turns.** The command ramps up to a slow spin (`WheelDiameterCharacterization/Omega`, 1 rad/s by default) so the wheels don't slip. Fewer than one full turn is rejected as insufficient data.
+5. **Release and read the result.** The command prints the effective wheel radius in inches to the console. The live estimate is published to NetworkTables at `Drive/WheelCharacterization/Estimated Radius`.
+6. **Repeat in the other direction** and average the two results.
+7. **Set `kWheelRadius`** in `TunerConstants` to the average, and turn `sysIdBindings` back off.
+8. **Check it.** Drive a measured straight distance (for example 5 m along a tape measure) and compare it with the odometry distance.
+
+</Procedure>
+
+## 5.6 When to Re-Tune
+
+- **New treads or a new carpet:** measure the wheel radius again, and check the slip current. Do this at each event, on the event carpet.
+- **Large weight change** (a mechanism added or removed): check drive kS and the slip current.
+- **Module service or a new steer gearbox:** re-check the steer gains on that module and its encoder offset.
+- **Switching output family:** re-tune that motor from the start. No gain carries over.

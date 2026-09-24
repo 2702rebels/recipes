@@ -60,6 +60,23 @@ export const GENERAL_PROCEDURES: GeneralProcedure[] = [
     description: "Adding kA and kV for Motion Magic in torque-current mode.",
     mode: "torque",
   },
+  {
+    title: "Swerve steer",
+    href: "/docs/guides/swerve#521-tuning-procedure",
+    description: "Steer kP (and kD if needed) on the carpet, commanding one module between 0° and 90°.",
+    mode: "voltage",
+  },
+  {
+    title: "Swerve drive",
+    href: "/docs/guides/swerve#531-tuning-procedure",
+    description: "Drive kS and kP, tuned by spinning the robot in place.",
+    mode: "torque",
+  },
+  {
+    title: "Swerve slip current and wheel radius",
+    href: "/docs/guides/swerve#54-slip-current",
+    description: "The wall test for slip current and the wheel radius characterization command.",
+  },
 ];
 
 /** Looks up the procedures for one mechanism by its display name. */

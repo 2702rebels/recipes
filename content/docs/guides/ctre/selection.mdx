@@ -16,7 +16,7 @@ This section brings together how to choose a control family for each mechanism: 
 | Arm | FOC (`MotionMagicExpoTorqueCurrentFOC`) | Simple single-joint arms where SysId plus voltage mode is good enough and the team knows voltage mode well. |
 | Elevator | FOC (`MotionMagicExpoTorqueCurrentFOC`) | Light, low-stakes lifts (e.g., a small secondary stage) that are rigid, settle quickly, and tune fast with SysId. |
 | Linear Deployment | FOC (`MotionMagicExpoTorqueCurrentFOC` to move, `TorqueCurrentFOC` to hold with force) | Position-only deployments with short travel (under ~4 inches or ~30°). Force-control deployments (climbers, hooks) should use torque-current. |
-| Swerve | FOC for steer (`PositionTorqueCurrentFOC` or `MotionMagicExpoTorqueCurrentFOC`), either for drive | Voltage for drive is widely used and proven. Torque-current for drive enables current-based traction control but is harder to tune. |
+| Swerve | FOC for drive (`DriveMotorClosedLoopOutput = TorqueCurrentFOC`) | Steer: voltage is simpler, because back-EMF damps the loop and kD can stay small. Drive: voltage is widely used and proven, and it is the choice without Phoenix Pro. |
 
 **The question for each mechanism:** does it gain from controlling torque directly, or is voltage good enough? Torque-current is worth it when any of these apply:
 
@@ -57,8 +57,10 @@ Voltage is the better choice when SysId, WPILib's feedforward classes, or the te
 
 You don't have to choose one family for the whole robot. Choose per mechanism. With Phoenix Pro, a typical robot might use:
 
-- **Swerve drive motors:** voltage or torque-current. Voltage is widely used and works well. Torque-current enables current-based traction control but is harder to tune.
-- **Swerve steering:** torque-current. The constant small corrections benefit from its smoothness and its hard current cap.
+- **Swerve drive motors:** torque-current. It is the easier one to tune: only kS and kP matter, since kV is close to zero and kD is rarely needed. The slip current then caps wheel torque directly, in the same Amps as the request. Voltage is widely used and works well too.
+- **Swerve steering:** voltage. Back-EMF damps the loop, so it settles with kP and little or no kD. Torque-current also works, but with no built-in damping it needs kP and kD tuned together ([§3.0.3](/docs/guides/ctre/torque-current#torque-mode-has-no-built-in-damping)).
+
+[Swerve Tuning](/docs/guides/swerve) has the team's procedure for both.
 - **Shooter flywheels:** torque-current. The clearest win: consistent recovery at high speed.
 - **Turret:** torque-current for continuous vision tracking. Voltage is enough if it only points at a few preset angles.
 - **Arm:** torque-current for the main scoring arm. Voltage is fine for simple wrists and hoods.
