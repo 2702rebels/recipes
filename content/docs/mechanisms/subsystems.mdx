@@ -1,0 +1,85 @@
+---
+title: Robots as Subsystems
+description: The cycle every FRC game asks a robot to run, the subsystems that appear year after year, and how a robot design maps to subsystems in code.
+---
+
+Every FRC robot is built from **subsystems**: groups of motors and sensors that each do one job. The names change from year to year, but the jobs don't. In short:
+
+1. **Every game is a cycle.** Pick up a game piece, carry it, score it, and go back for another. Most games end with a climb.
+2. **Each step of the cycle needs a subsystem.** An intake picks pieces up, an indexer or end effector holds them, and a shooter or a scoring mechanism puts them in the goal.
+3. **Some subsystems exist to move others.** Pivots, elevators, and arms carry the scoring mechanism to the right place. Together they form the **superstructure**.
+4. **Code follows the hardware.** Each subsystem becomes one class in the robot code, and commands use subsystems to do the cycle.
+
+## 1.1 Every game is a cycle
+
+A **game piece** is the object the robot scores with: a ball, a cone, a ring, a tube. A **cycle** is one round trip: get a game piece, bring it to the goal, score it. A match is mostly cycles, so the robot that cycles fastest and most reliably usually scores the most.
+
+Every cycle has the same four steps:
+
+| Step | What happens | Subsystem that does it |
+|:---|:---|:---|
+| **Acquire** | Pick a piece up off the floor, or take it from a human player at a station. | Intake |
+| **Control** | Hold the piece securely while the robot drives. Move it to where it can be scored. | Indexer, hopper, or end effector |
+| **Position** | Aim at the goal or reach up to it. | Turret, pivot, elevator, arm, and the drivetrain |
+| **Score** | Launch or place the piece in the goal. | Shooter or end effector |
+
+Most games add an **endgame**: in the last seconds of the match, robots earn points by climbing a bar, a chain, or a structure. The climber is a separate subsystem that sits idle the rest of the match.
+
+The drivetrain is part of every step. It is covered in its own section: [Swerve Drive](/docs/swerve-drive).
+
+## 1.2 What a subsystem is
+
+A **subsystem** is a group of motors, sensors, and mechanical parts that does one job and is controlled as one unit. An intake might have one motor that spins its rollers, one that swings it out past the bumper, and a sensor that sees the game piece. Those three parts belong together: the rest of the robot asks the intake to "pick up a piece" and doesn't care how it does that.
+
+Split the robot into subsystems by **what moves together**:
+
+- **One job, one subsystem.** If two motors always work together on the same task, they belong in the same subsystem. Two flywheels that launch the same ball form one shooter.
+- **Separate what moves separately.** If two mechanisms need to do different things at the same time, make them separate subsystems. A robot should be able to run its intake while its shooter spins up.
+- **Group mechanisms that share space.** When an elevator, an arm, and a wrist all move the same end effector, they can collide. They need one owner that knows where all of them are. That owner is the [superstructure](/docs/mechanisms/superstructure).
+
+<RobotLayouts />
+
+## 1.3 Subsystems that appear every year
+
+| Subsystem | What it does | Common forms |
+|:---|:---|:---|
+| **Drivetrain** | Moves the robot around the field | Swerve, tank |
+| **Intake** | Picks up game pieces | Rollers on a pivot or slide that reach past the bumper, or a funnel at a human player station |
+| **Indexer** | Holds pieces inside the robot and feeds them, one at a time, to the next subsystem | Belts, rollers, and a sensor that sees each piece |
+| **Hopper** | Stores many pieces at once, in games where a robot can carry more than one or two | A bin with a floor that moves pieces toward the indexer, such as a spindexer or a rolling floor |
+| **Shooter** | Launches pieces at a goal | One or more flywheels, often with a hood to set the angle and a turret to aim |
+| **End effector** | The "hand" at the end of a mechanism that grips, holds, and releases a piece | Rollers, a claw, or a suction cup, often on a wrist |
+| **Pivot** | Rotates something about a fixed axis: an intake, a shooter, an arm | A gearbox on a shaft, usually with an absolute encoder |
+| **Elevator** | Lifts something straight up | One or more stages on rails, pulled by belts, chain or rope |
+| **Climber** | Lifts the robot off the floor in the endgame | Hooks on an elevator-like lift, or a pivoting arm |
+
+The terms overlap. An **arm** is a long pivot. A **wrist** is a small pivot at the end of an arm. A **manipulator** is any mechanism that handles game pieces, so intakes and end effectors are both manipulators. Teams often call the end effector "the manipulator".
+
+## 1.4 Game type sets the robot
+
+Games fall into two broad types, and the type decides most of the robot.
+
+| Game type | What scores | Key subsystems | Recent games |
+|:---|:---|:---|:---|
+| **Shooting game** | Launching pieces into a goal from a distance | Intake, indexer, hopper, shooter, turret or hood | 2022 Rapid React, 2024 Crescendo, 2026 Rebuilt |
+| **Pick-and-place game** | Setting pieces on pegs, shelves, or branches at set heights | Intake, end effector, elevator, arm, wrist | 2023 Charged Up, 2025 Reefscape |
+
+Many games mix the two. In 2024 Crescendo, robots shot notes into the speaker but placed them into the amp, which pushed teams toward a shooter that could also score at low speed. In 2025 Reefscape, robots placed coral on the reef but also scored algae, a large ball, into the net on the barge.
+
+Here is how recent games mapped to subsystems:
+
+| Game | Game pieces | What most competitive robots used |
+|:---|:---|:---|
+| **2022 Rapid React** | Cargo: inflatable balls | A wide intake that reached over the bumper, an indexer holding two balls, a flywheel shooter (often on a turret), and a climber that moved from rung to rung |
+| **2023 Charged Up** | Cones and cubes | A ground or shelf intake, an elevator or a long arm (sometimes both), and an end effector that could hold either piece |
+| **2024 Crescendo** | Notes: foam rings 14 in across | An intake under the bumper, an indexer, a pivoting shooter, a way to score in the amp, and a climber for the chain on the stage |
+| **2025 Reefscape** | Coral (PVC tubes) and algae (16 in balls) | An elevator with a pivoting end effector to reach four reef levels, a way to take coral from the station or the floor (on some robots, the end effector itself), and a climber for the cage |
+| **2026 Rebuilt** | Fuel: foam balls about 6 in across | A wide roller intake that slid out past the bumper, a large hopper with a spindexer or a rolling floor, and a climber for the tower rungs. Shooters came in two types: a wide fixed shooter that emptied the hopper in one big volley (a "dumper"), or a turret that shot a continuous stream ([Volley or stream](/docs/mechanisms/scoring#321-volley-or-stream)) |
+
+## 1.5 Subsystems in code
+
+In WPILib's **command-based** framework, each subsystem becomes one class that extends `SubsystemBase`. The class owns its motors and sensors, and it is the only code that talks to them directly. The rest of the robot asks it to do things through methods such as `runIntake()` or `setHeight()`.
+
+A **command** is an action that uses one or more subsystems: "intake until we have a piece", "spin up and shoot", "raise the elevator to L4". A command declares the subsystems it **requires**. The scheduler makes sure two commands never control the same subsystem at once. If a new command needs a subsystem that another command is using, the old command is interrupted.
+
+This is why splitting the robot well matters for software. Split it too finely, and every action has to coordinate many subsystems. Group mechanisms that don't depend on each other, and they can't run at the same time. [The Superstructure](/docs/mechanisms/superstructure) covers the mechanisms that do depend on each other.

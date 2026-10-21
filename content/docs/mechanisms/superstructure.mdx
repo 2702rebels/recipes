@@ -1,0 +1,116 @@
+---
+title: The Superstructure
+description: What a superstructure is, why mechanisms that share space must be coordinated, three ways to sequence them, and how to structure the code.
+---
+
+The **superstructure** is the group of mechanisms above the drivetrain that position and handle game pieces: an elevator, an arm, a wrist, an end effector, and sometimes the intake. These mechanisms share space, so they can hit each other or the robot. The superstructure, in the robot and in the code, is what keeps that from happening. In short:
+
+1. **Think in poses.** A **pose** is a named set of positions for every joint: "stow", "handoff", "L4". The driver asks for a pose, and the superstructure works out how to get there.
+2. **Moving everything at once can crash.** Each joint might start and end in a safe place and still pass through the intake on the way.
+3. **Hold a joint back only when it has to wait.** The simplest safe plan moves one joint at a time, but then every joint waits, even when it doesn't need to. An **interlock** is a rule that holds one joint back only while moving it would cause a crash, such as "the arm may not swing out until the elevator is above 10 in". Each joint starts as soon as it is safe, so the move is safe and almost as fast as moving everything at once.
+4. **One owner for the rules.** Put the rules about what may move when in one place in the code, not spread across commands.
+
+## 5.1 What a superstructure is
+
+Teams use the word for two things:
+
+- **The mechanisms.** Everything mounted on top of the drivetrain that moves game pieces around: on a 2025 robot, the elevator, the pivot on its carriage, and the end effector.
+- **The code that coordinates them.** A class that knows where every joint is and decides which may move. It may be one subsystem that owns all the joints, or a coordinator that commands separate subsystems.
+
+Not every robot needs one. A robot whose intake, indexer, and shooter never touch each other can treat each as its own subsystem. A robot with an elevator, an arm, and an intake that all reach the same space needs a superstructure.
+
+## 5.2 Why coordination matters
+
+Each mechanism can be tuned perfectly and the robot can still break itself, because the joints share space. Common problems:
+
+| Problem | Example |
+|:---|:---|
+| **Collisions with the robot** | An end effector swings down through the intake, the bumpers, or the elevator's own frame |
+| **Collisions between mechanisms** | A deployed intake and a lowered arm want the same space |
+| **Breaking the rules mid-move** | An arm that is inside the reach limit at both ends of a move swings past it on the way |
+| **Tipping** | The elevator rises while the robot is still braking hard |
+| **Dropped pieces** | A handoff starts before the piece is fully inside the end effector |
+
+All of these happen **between** poses, not at them. Checking that each pose is safe is not enough. Every move between poses has to be safe too.
+
+## 5.3 Poses
+
+A **pose** (also called a state or a goal) sets every joint at once. A 2025 robot might have:
+
+| Pose | Elevator | Arm | End effector |
+|:---|:---|:---|:---|
+| **Stow** | Bottom | Tucked inside the frame | Holding, or empty |
+| **Floor pickup** | Bottom | Swung down past the bumper to the carpet | Intaking |
+| **L2, L3, L4** | Height for the level | Tilted down toward the branch | Holding, then scoring |
+| **Algae** | Height between two levels | Level | Intaking algae |
+| **Climb** | Bottom | Clear of the climber | Off |
+
+The driver presses a button for a pose. The superstructure then decides the order in which the joints move.
+
+## 5.4 Try it: sequencing a move
+
+This robot has an elevator that carries an arm, and an intake in front of the elevator. The arm tucks straight down behind the intake for the handoff, and tilts down at 35° to score on the 2025 reef. All four poses are safe. Start at **Handoff**, pick **L2**, and press **Play move** with each coordination option.
+
+<SuperstructureMoves />
+
+With the defaults (handoff to L2):
+
+| Coordination | Move time | Result |
+|:---|:---|:---|
+| **Both at once** | 0.21 s | The arm swings into the intake 0.045 s into the move, before the elevator has lifted it clear |
+| **One at a time** | 0.38 s | Safe. The elevator rises, then the arm swings out |
+| **Interlock** | 0.33 s | Safe. The elevator rises, and the arm starts as soon as the elevator passes the safe height |
+
+Things to notice:
+
+1. **A move can be safe in one direction and not the other.** From L3 or L4 back to the handoff, moving both at once is safe: the arm tucks long before the elevator gets low. From L2, it is not.
+2. **The interlock costs nothing when it isn't needed.** From the handoff to L3 or L4, the arm reaches the safe height before it would have finished anyway, so the interlock is as fast as moving both at once.
+3. **One at a time is always slowest.** Each joint waits for the other to finish, even when waiting isn't needed.
+
+The model ignores acceleration, so real moves take longer. The order of events is the same.
+
+## 5.5 Superstructure in code
+
+There are two common ways to structure the code. Both work.
+
+| | One superstructure subsystem | Separate subsystems plus a coordinator |
+|:---|:---|:---|
+| **How** | One `SubsystemBase` owns the elevator, arm, and wrist motors. A state machine inside it moves between poses | Each mechanism is its own subsystem. A coordinator class or command factory builds the commands that move them in order |
+| **Strengths** | The rules live in one place and run every loop. No command can bypass them | Each mechanism can be tested on its own. Commands are easy to compose |
+| **Weaknesses** | One large class. Every action needs the whole superstructure, so nothing else can use one joint | A command that controls one joint directly can bypass the rules |
+
+Whichever you choose, follow these rules:
+
+1. **Write the interlocks as checks on measured positions.** "The arm may swing once the elevator *is* above 10 in", not "once the elevator has been told to go above 10 in".
+2. **Check every loop.** Run the interlock in `periodic()`, or in a command that runs every loop. A check that runs once at the start of a move misses a joint that stalls halfway.
+3. **Use tolerances and timeouts.** A joint never lands exactly on its setpoint. Treat "within 1 in" or "within 2°" as there, and give up on a move that takes far longer than it should.
+4. **Decide from the commanded move, not the measured direction of motion.** Pick the rules for a move from where it was told to go: "the elevator is going up to L3", not "the elevator is moving up". A joint can move against its command for a moment. An elevator sent up to a setpoint can overshoot and then move down to settle on it. Logic that reads the measured motion would treat that as a move down and apply the wrong rules.
+5. **Choose what happens on enable.** A joint that jumps to its last setpoint when the robot is enabled can hit something. Pick one of these on purpose:
+   - **Hold where it is.** Every joint stays put until the driver asks for a pose. This is the simplest safe choice.
+   - **Move to a default pose.** This is fine if the interlocks keep the move collision-free from any starting position, or if the joints move slowly for a short time after enable, or both. Slowing down is useful in practice mode, where the robot is enabled again and again.
+
+A sketch of the interlock from the widget, run every loop:
+
+```java
+@Override
+public void periodic() {
+  // The arm may only move once the elevator is above the safe height.
+  boolean elevatorSafe = elevator.getHeight() >= SAFE_HEIGHT;
+  arm.setGoal(elevatorSafe ? goal.armAngle() : arm.getGoal());
+
+  // The elevator may only go below the safe height once the arm is where it is going.
+  boolean armThere = arm.isNear(goal.armAngle());
+  elevator.setGoal(armThere ? goal.height() : Math.max(goal.height(), SAFE_HEIGHT));
+}
+```
+
+The method names are illustrative. `getGoal()` returns the arm's last setpoint, so the arm holds where it was told to be, rather than chasing its own measured angle.
+
+**Draw it before you code it.** Sketch the robot from the side, mark every keep-out zone, and work out the safe height and safe angles. WPILib's `Mechanism2d` can draw the superstructure in simulation and in dashboards such as AdvantageScope, so you can see a move before you try it on the robot.
+
+## 5.6 Testing a new move
+
+1. **Test slowly.** Lower the profile's top speed (or use a low output limit) the first time you run a new move.
+2. **Keep a hand on disable.** Someone should watch the mechanism, not the laptop, with the disable key ready.
+3. **Log the goal and the measured pose.** When something goes wrong, the log shows which joint moved first and why.
+4. **Raise speed in steps.** Once a move works slowly, raise speed and check again. Faster moves overshoot more, and overshoot can carry a joint into a keep-out zone.

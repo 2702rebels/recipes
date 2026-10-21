@@ -37,6 +37,7 @@ lib/procedures.ts        Index of tuning procedures (anchors) for the index page
 lib/vision.ts            Camera projection and PnP solver (homography + Levenberg-Marquardt) for the Vision pages.
 lib/vision-sims.ts       Monte Carlo and sweep scenarios built on lib/vision.ts. lib/odometry-sim.ts is the drift sim.
 lib/localization-sim.ts  Odometry integration, 1-D Kalman filter, WPILib estimator, and factor-graph smoother for the Localization pages.
+lib/superstructure.ts    Side-view elevator-and-arm model and move sequencing for the Superstructure page.
 lib/swerve.ts            Swerve kinematics, desaturation, and the drive gearing and traction model for the Swerve Drive pages.
 app/                     Next.js routes: landing page, docs layout, search index.
 source.config.ts         Global MDX plugins (remark-math, rehype-katex).

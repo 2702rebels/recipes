@@ -4,6 +4,8 @@ import type { ComponentType } from "react";
 
 import { Callout } from "@/components/callout";
 import { FactorGraphDiagram } from "@/components/diagrams/localization";
+import { MechanismTypes } from "@/components/diagrams/mechanisms";
+import { RobotLayouts } from "@/components/diagrams/robot-layouts";
 import { DrivetrainComparison } from "@/components/diagrams/swerve";
 import { DrivetrainLayout, MK3Drawing } from "@/components/diagrams/swerve-layout";
 import {
@@ -31,6 +33,7 @@ import { PinholeExplorer } from "@/components/interactive/pinhole-explorer";
 import { PoseScatter } from "@/components/interactive/pose-scatter";
 import { RelativeVsGlobal } from "@/components/interactive/relative-global";
 import { RollingShutter } from "@/components/interactive/rolling-shutter";
+import { SuperstructureMoves } from "@/components/interactive/superstructure-moves";
 import { SwerveGearing } from "@/components/interactive/swerve-gearing";
 import { SwerveKinematics } from "@/components/interactive/swerve-kinematics";
 import { SwerveSkew } from "@/components/interactive/swerve-skew";
@@ -64,6 +67,7 @@ const widgets = {
   PoseScatter: resettable(PoseScatter),
   RelativeVsGlobal: resettable(RelativeVsGlobal),
   RollingShutter: resettable(RollingShutter),
+  SuperstructureMoves: resettable(SuperstructureMoves),
   SwerveGearing: resettable(SwerveGearing),
   SwerveKinematics: resettable(SwerveKinematics),
   SwerveSkew: resettable(SwerveSkew),
@@ -84,9 +88,11 @@ export function getMDXComponents(components?: MDXComponents) {
     DrivetrainLayout,
     FactorGraphDiagram,
     FrameChain,
+    MechanismTypes,
     MK3Drawing,
     PinholeDiagram,
     RelativeGlobalDiagram,
+    RobotLayouts,
     ShutterTimeline,
     ...widgets,
     ...components,

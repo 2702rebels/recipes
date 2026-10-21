@@ -1,0 +1,4 @@
+{
+  "title": "Robot Mechanisms",
+  "pages": ["subsystems", "intakes", "scoring", "positioning", "superstructure", "control-types"]
+}

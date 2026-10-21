@@ -1,0 +1,63 @@
+---
+title: Robot Mechanisms
+description: How an FRC robot breaks down into subsystems. Intakes, shooters, end effectors, pivots, elevators, and the superstructure, with examples from recent games, and the five mechanism types every one of them tunes like.
+---
+
+The game changes every year, but the robots don't change as much as you might think. Every robot has to pick up game pieces, carry them, and score them, and most also climb at the end of the match. The same kinds of mechanisms show up every season to do those jobs: an **intake** to pick pieces up, a **shooter** or an **end effector** to score them, and **pivots** and **elevators** to move things where they need to be.
+
+This section is a tour of those mechanisms. It explains what each one does, when a team picks one design over another, and how the parts work together. It ends with the idea the rest of this site is built on: from the point of view of the motor controller, almost every mechanism is one of five types. Once you know which type you have, you know how to tune it.
+
+<Callout title="What you need">
+  No math beyond algebra. The last page has one equation, and it is explained term by term. One page has an
+  interactive widget.
+</Callout>
+
+## Where to start
+
+Read the pages in order. Each one builds on the one before.
+
+<Cards>
+  <Card
+    title="1. Robots as Subsystems"
+    href="/docs/mechanisms/subsystems"
+    description="The game cycle every robot runs, the subsystems that show up every year, and how they map to robot code."
+  />
+  <Card
+    title="2. Intakes and Indexers"
+    href="/docs/mechanisms/intakes"
+    description="Picking up game pieces from the floor or a station, holding them, and knowing when you have one."
+  />
+  <Card
+    title="3. Shooters and End Effectors"
+    href="/docs/mechanisms/scoring"
+    description="Launching game pieces with flywheels, hoods, and turrets, or placing them with a gripper."
+  />
+  <Card
+    title="4. Pivots, Elevators, and Arms"
+    href="/docs/mechanisms/positioning"
+    description="How a robot reaches high or far, and when to pick an elevator, an arm, or both."
+  />
+  <Card
+    title="5. The Superstructure"
+    href="/docs/mechanisms/superstructure"
+    description="Coordinating several mechanisms that share space, so they never hit each other or the robot."
+  />
+  <Card
+    title="6. Five Mechanisms to Tune"
+    href="/docs/mechanisms/control-types"
+    description="Why nearly every mechanism tunes like a flywheel, turret, arm, elevator, or linear deployment."
+  />
+</Cards>
+
+## Key ideas at a glance
+
+| Idea | One-line summary | Page |
+|:---|:---|:---|
+| The cycle | Every game is a loop: acquire a piece, carry it, score it, repeat. Climb at the end. | [Robots as Subsystems](/docs/mechanisms/subsystems#11-every-game-is-a-cycle) |
+| Subsystem | A group of motors and sensors that does one job and is controlled as a unit. | [Robots as Subsystems](/docs/mechanisms/subsystems#12-what-a-subsystem-is) |
+| Touch it, own it | An intake that grabs a piece the moment it touches it saves more time than any other part of the cycle. | [Intakes and Indexers](/docs/mechanisms/intakes#21-what-makes-a-good-intake) |
+| Sensing the piece | The robot has to know when it holds a game piece, so it can stop the intake and get ready to score. | [Intakes and Indexers](/docs/mechanisms/intakes#25-knowing-when-you-have-a-piece) |
+| Shoot or place | Shooting games reward range and speed. Pick-and-place games reward reach and precision. | [Shooters and End Effectors](/docs/mechanisms/scoring#31-two-ways-to-score) |
+| Elevator or arm | An elevator moves straight up. An arm swings in an arc, so its reach and its gravity load change with angle. | [Pivots, Elevators, and Arms](/docs/mechanisms/positioning#43-elevator-or-arm) |
+| Superstructure | The mechanisms above the drivetrain that share space and must move in a safe order. | [The Superstructure](/docs/mechanisms/superstructure#51-what-a-superstructure-is) |
+| Five types | To the motor controller, nearly every mechanism is a flywheel, turret, arm, elevator, or linear deployment. | [Five Mechanisms to Tune](/docs/mechanisms/control-types#61-the-five-types) |

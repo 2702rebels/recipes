@@ -1,4 +1,4 @@
-import { BookOpen, Camera, Gauge, GraduationCap, LocateFixed } from "lucide-react";
+import { BookOpen, Camera, Cog, Gauge, GraduationCap, LocateFixed, Move } from "lucide-react";
 import Link from "next/link";
 
 import type { ReactNode } from "react";
@@ -17,6 +17,12 @@ const SECTIONS: { title: string; href: string; description: string; icon: ReactN
     icon: <Gauge className="size-5" />,
   },
   {
+    title: "Robot Mechanisms",
+    href: "/docs/mechanisms",
+    description: "How a robot breaks down into subsystems, the superstructure, and the five mechanism types to tune.",
+    icon: <Cog className="size-5" />,
+  },
+  {
     title: "Vision",
     href: "/docs/vision",
     description: "How a robot finds itself on the field with a camera: AprilTags, PnP solving, and calibration.",
@@ -27,6 +33,12 @@ const SECTIONS: { title: string; href: string; description: string; icon: ReactN
     href: "/docs/localization",
     description: "How a robot tracks its pose: odometry, Kalman filters, WPILib's pose estimators, and factor graphs.",
     icon: <LocateFixed className="size-5" />,
+  },
+  {
+    title: "Swerve Drive",
+    href: "/docs/swerve-drive",
+    description: "How a swerve drivetrain works: its parts, the kinematics, module control, and gearing and traction.",
+    icon: <Move className="size-5" />,
   },
   {
     title: "Training",

@@ -1,0 +1,121 @@
+---
+title: Five Mechanisms to Tune
+description: Why almost every FRC mechanism tunes like a flywheel, turret, arm, elevator, or linear deployment, how to tell which one you have, and the cases that need extra care.
+---
+
+Robots look different every year, but their motors see only a few kinds of load. From the controller's point of view, almost every mechanism is one of five types: a **flywheel**, a **turret**, an **arm**, an **elevator**, or a **linear deployment**. Once you know which type a mechanism is, you know which gains it needs and which [tuning procedure](/docs/guides/ctre/procedures) to follow. In short:
+
+1. **Ask three questions.** Does the controller hold a speed or a position? How does gravity load the motor: not at all, by the same amount everywhere, or by an amount that changes with angle? Is the travel long, or short with hard stops?
+2. **The answers pick the type.** Speed control is a flywheel. Position with no gravity is a turret, with a constant gravity load an elevator, and with a load that changes with angle an arm. Short travel between hard stops is a linear deployment.
+3. **The type picks the gains.** Arms and elevators need kG for gravity: a cosine for an arm, a constant for an elevator. Turrets, arms, and elevators need kD and usually a motion profile. Flywheels need neither.
+4. **Some mechanisms need extra care.** A wrist on an arm, a telescoping arm, or a spring-balanced mechanism doesn't fit one type exactly. Start from the closest type and add what's missing.
+
+## 6.1 The five types
+
+<MechanismTypes />
+
+| Type | Controller holds | Gravity load on the motor | Gains that matter | Examples |
+|:---|:---|:---|:---|:---|
+| **Flywheel** | Speed | None | kS, kV, kP (and kA for spin-up) | Shooter wheels, intake and indexer rollers, swerve drive wheels |
+| **Turret** | Angle | None | kS, kV, kA, kP, kD | Turrets, swerve steering |
+| **Arm** | Angle | Changes with angle: largest when horizontal, zero when vertical | kG (cosine), kS, kV, kA, kP, kD | Arms, wrists, shooter pivots, intake pivots, hoods |
+| **Elevator** | Height | The same at every height | kG (constant), kS, kV, kA, kP, kD | Elevators, linear climbers, telescoping stages |
+| **Linear deployment** | Position | Any of the above | Like an arm or elevator, but often just kG, kS, and kP | Intake slides, short intake pivots, climber hooks, hopper extensions |
+
+The gain names come from the [gain slot model](/docs/guides/ctre/foundation#12-the-gain-slot-model): kS for friction, kV for speed, kA for acceleration, kG for gravity, and kP and kD for feedback. The table assumes voltage mode. In torque-current mode, kV is close to zero ([Feedforward in Torque Mode](/docs/guides/ctre/torque-current#303-feedforward-in-torque-mode)).
+
+## 6.2 Why five are enough
+
+Every mechanism driven by a motor obeys the same balance. The motor's torque goes into speeding the mechanism up, and into overcoming friction and gravity:
+
+$$
+J\,\ddot{\theta} = \tau_{\text{motor}} - \tau_{\text{friction}} - \tau_{\text{gravity}}(\theta)
+$$
+
+Term by term:
+
+- $J\,\ddot{\theta}$ is **inertia** times **acceleration**. $J$ is how hard the mechanism is to speed up: its mass and how far from the axle that mass sits. For an elevator, use mass and linear acceleration instead. The feedforward gain kA covers this term.
+- $\tau_{\text{motor}}$ is the motor's torque, after the gearbox. In voltage mode, part of the voltage goes to cancel the motor's back-EMF, which grows with speed. That is what kV covers ([Voltage Control](/docs/guides/ctre/voltage)).
+- $\tau_{\text{friction}}$ is friction in bearings, gears, and belts. It is roughly constant and always opposes motion. kS covers it.
+- $\tau_{\text{gravity}}(\theta)$ is the torque gravity puts on the motor. kG covers it.
+
+The first three terms look the same on every mechanism. Only the gravity term changes, and it comes in three shapes:
+
+| Gravity term | When | Type |
+|:---|:---|:---|
+| **Zero** | The mechanism turns about a vertical axis (a turret), or it is balanced about its axle, so gravity pulls equally on both sides (a flywheel) | Flywheel or turret |
+| **Constant** | The mechanism moves in a straight line, up or at a fixed tilt | Elevator |
+| **Cosine of the angle** | The mechanism rotates in a vertical plane | Arm |
+
+The rest of the difference is **what the controller holds**. A flywheel holds a speed, so it needs kV and doesn't care where it is. A turret, arm, or elevator holds a position, so it needs kP to pull back to that position and usually kD to settle there.
+
+The fifth type, the **linear deployment**, is not new physics. It is an arm or an elevator with short travel between hard stops. Short moves are almost all speeding up and slowing down, so a simpler tune is often enough ([Linear Deployment](/docs/guides/ctre/voltage#25-linear-deployment-position)).
+
+## 6.3 Which type is it?
+
+Go down the table. The first row that fits the mechanism gives its type:
+
+| If the mechanism... | Type |
+|:---|:---|
+| Holds a speed | **Flywheel** |
+| Moves a short way between hard stops, to only a few positions | **Linear deployment** |
+| Holds a position, and gravity doesn't load the motor | **Turret** |
+| Holds a position, and gravity loads the motor the same everywhere | **Elevator** |
+| Holds a position, and gravity's load changes with angle | **Arm** |
+
+Mechanisms from recent games, sorted by type:
+
+| Type | Mechanism | Game | Notes |
+|:---|:---|:---|:---|
+| **Flywheel** | Shooter flywheels | 2022, 2024, 2026 | Recovery after each shot matters most |
+| **Flywheel** | Intake, indexer, and end effector rollers | Every year | Usually run open loop at a set voltage |
+| **Flywheel** | Spindexer, rolling floor, or dye rotor | 2026 | Spins at a set speed. Often run open loop |
+| **Flywheel** | Swerve drive wheels | Every year | Speed control. The traction limit caps the current ([Swerve Tuning](/docs/guides/swerve)) |
+| **Turret** | Turret | 2022, 2026 | Watch for cable limits. Most turrets can't spin forever |
+| **Turret** | Swerve steering | Every year | Wraps around continuously ([Swerve Tuning](/docs/guides/swerve)) |
+| **Arm** | Arm | 2023 | Its kG grows with what it carries |
+| **Arm** | Pivot on an elevator carriage | 2025 | Gravity acts the same whatever the elevator's height |
+| **Arm** | Pivoting shooter | 2024 | Heavy, with the flywheels far from the axle |
+| **Arm** | Climber on a pivot | 2025 | Pulls the whole robot. Pull with a set current |
+| **Arm**, or linear deployment | Hood | 2022, 2026 | A light hood with short travel tunes like a deployment |
+| **Arm**, or linear deployment | Intake pivot | Every year | Often only two positions: in and out |
+| **Elevator** | Elevator | 2025 | Check the rigging. Some elevators need a different kG for each stage |
+| **Elevator** | Climber on a lift | 2024, 2026 | Pulls the whole robot. Pull with a set current |
+| **Linear deployment** | Intake slide | 2026 | Drives out to a hard stop, and back in |
+| **Linear deployment** | Expanding hopper | 2026 | Often only needs to reach a hard stop |
+
+## 6.4 Mechanisms that need extra care
+
+Some mechanisms don't fit one type exactly. Start from the closest type, then handle what's different:
+
+| Mechanism | What's different | What to do |
+|:---|:---|:---|
+| **Wrist on an arm** | Gravity acts on the wrist's angle from horizontal, which is the arm's angle plus the wrist's angle. The wrist's own encoder only knows its angle relative to the arm | Compute the gravity feedforward in code from both angles and pass it with the request ([Compound Arms](/docs/guides/ctre/torque-current#334-compound-arms-multi-joint)) |
+| **Two-joint arm** | Each joint's gravity load depends on the other joint's angle | Same as a wrist on an arm |
+| **Telescoping arm** | The pivot's gravity load grows as the arm extends. The extension's gravity load changes with the pivot's angle | Schedule kG by extension (switch gain slots), or compute the feedforward in code |
+| **Tilted elevator** | Gravity pulls along the rails with only part of its strength | Still an elevator. kG is just smaller |
+| **Spring- or gas-spring-balanced** | The spring force changes with position, so the leftover load is neither constant nor a cosine | Measure the hold at several positions with the bracketing test. If it changes a lot, schedule kG or compute it in code |
+| **Holding a game piece** | A heavy piece raises kG and kA | Measure kG with and without the piece. Switch gain slots when the robot picks one up |
+| **Differential mechanism** | Two motors work together to drive two joints, as in some wrists | Convert motor motion to joint motion first. Each joint is then one of the five types |
+
+## 6.5 Tune it
+
+Once you know the type, go to its tuning procedure:
+
+<Cards>
+  <Card
+    title="Tuning Procedures"
+    href="/docs/guides/ctre/procedures"
+    description="Every step-by-step procedure, by mechanism type and output family."
+  />
+  <Card
+    title="Choosing a Control Mode"
+    href="/docs/guides/ctre/selection"
+    description="Voltage or torque-current? Recommendations for each mechanism type."
+  />
+  <Card
+    title="Foundations"
+    href="/docs/guides/ctre/foundation"
+    description="Gain slots, feedforward first, motion profiles, and the general tuning workflow."
+  />
+</Cards>

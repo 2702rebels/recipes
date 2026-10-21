@@ -1,0 +1,106 @@
+---
+title: Pivots, Elevators, and Arms
+description: How an FRC robot reaches high or far. Pivots, arms, elevators, and combinations of them, when each one fits, how game rules shape the choice, and climbers.
+---
+
+Goals sit at different heights and distances, and the robot has to bring its scoring mechanism to each one. Three kinds of mechanism do this: **pivots** (and **arms**, which are long pivots), **elevators**, and combinations of the two. In short:
+
+1. **A pivot rotates. An elevator lifts.** A pivot's tip moves in an arc, so raising it also moves it in or out. An elevator moves straight up and down.
+2. **Gravity loads them differently.** An arm is hardest to hold when it is horizontal and easiest when it points straight up or down. An elevator's load is the same at every height.
+3. **The rules shape the choice.** Height limits, reach limits, and goal heights change every year. A game with a low height limit has short pivots. A game with high goals has elevators.
+4. **Many robots combine them.** An elevator that carries a pivoting end effector reaches high goals and angles the piece to meet them. Then the two have to be coordinated ([The Superstructure](/docs/mechanisms/superstructure)).
+
+## 4.1 What sets the reach
+
+Before choosing a mechanism, find out from the game manual:
+
+- **How high and far the goals are.** The highest goal sets how tall the robot must reach.
+- **How tall the robot may be.** Most games limit height at the start of the match, and many also limit it during the match.
+- **How far the robot may reach past its frame perimeter.** The **frame perimeter** is the outline of the robot's frame, not counting bumpers.
+
+The limits change every year, and they push robots toward different designs:
+
+| Game | Highest goals | Height limit | Reach past the frame | What robots did |
+|:---|:---|:---|:---|:---|
+| **2023 Charged Up** | Top row of the grid | 6 ft 6 in during the match | 48 in | Long arms and tilted elevators that reached far out over the grid |
+| **2024 Crescendo** | Speaker opening, 6.5 to 6.9 ft up | 4 ft | 12 in | Compact pivoting shooters that shot up into the speaker rather than reaching it |
+| **2025 Reefscape** | L4 branches, 6 ft up | 3 ft 6 in at the start of the match | 18 in | Tall elevators, folded down at the start, carrying a pivoting end effector |
+| **2026 Rebuilt** | Hub opening, about 6 ft up | 30 in for the whole match | 12 in | Low robots with shooters to reach the hub. Many robots stayed under 22.25 in to drive through the trench |
+
+The 2024 and 2026 rows show the pattern: when the goal is far above the height limit, the robot shoots instead of reaching. The 2025 row shows the opposite: a high goal that a robot was allowed to reach up to, and a game piece that had to be placed, so elevators came back. The starting height limit meant they had to start folded down.
+
+## 4.2 Pivots and arms
+
+A **pivot** rotates something about a fixed axle. It is the simplest positioning mechanism: one gearbox, one axle, and one sensor. Pivots are everywhere on an FRC robot:
+
+- An **intake pivot** swings an intake out past the bumper.
+- A **shooter pivot** or a **hood** sets the angle of a shot.
+- A **wrist** turns an end effector at the end of an arm.
+- An **arm** is a long pivot that carries something far from its axle.
+
+What to know about pivots:
+
+- **The tip moves in an arc.** Raising an arm also moves its tip in or out. To reach a point at a given height *and* distance, an arm has only one angle that works, and it may not be the angle you need to score.
+- **The gravity load changes with angle.** Gravity pulls hardest on an arm when it is horizontal and not at all when it points straight up or down. The load follows the cosine of the angle from horizontal, which is why arms tune differently from elevators ([Five Mechanisms to Tune](/docs/mechanisms/control-types#61-the-five-types)).
+- **Long arms need a lot of torque.** Holding a load at the end of a long arm takes much more torque than holding it close to the axle. That means a large gear reduction, which makes the arm slower.
+- **Small errors grow at the tip.** A 1° error at the axle moves the tip of a 30 in arm by about half an inch ($30\,\text{in} \times \pi / 180 = 0.52\,\text{in}$). Gear backlash and flex in the arm add to it.
+- **Use an absolute encoder.** The motor's own encoder doesn't know the arm's angle at power-up. An absolute encoder on the axle does.
+- **An arm can swing over the robot.** That lets one arm score on both sides of the robot, which an elevator can't do. In 2023, some robots used this to pick up pieces on one side and score on the other.
+
+## 4.3 Elevator or arm
+
+An **elevator** lifts a **carriage** straight up on rails. Belts, chain, or rope pull it, and constant-force springs sometimes help hold it up. To reach higher than the robot is tall, an elevator has **stages** that slide out of each other like a telescope. How the stages are pulled (rigged) changes how the elevator tunes ([Multi-Stage and Cascaded Elevators](/docs/guides/ctre/voltage#243-multi-stage-and-cascaded-elevators)).
+
+| | Elevator | Arm |
+|:---|:---|:---|
+| **Motion** | Straight up and down | An arc |
+| **Gravity load** | The same at every height | Largest when horizontal |
+| **Reach out from the robot** | None by itself | Up to the arm's length |
+| **Parts** | Rails, bearings, rigging, stages | One axle and a gearbox |
+| **Weight up high** | The carriage and stages | The arm and what it carries |
+| **Can score on both sides** | No | Yes, if it can swing over |
+
+Choose by what the goal needs:
+
+| If the goal... | Consider |
+|:---|:---|
+| Is directly above the robot's edge and high | An elevator |
+| Is out past the bumper, or low | An arm or pivot |
+| Has to be approached at a set angle, such as a tilted branch | An elevator with a wrist or pivot on the carriage |
+| Is above the height limit | A shooter, not a reach mechanism |
+| Is on both sides of the robot | An arm that swings over the top |
+
+**Combinations.** Many competitive robots use more than one:
+
+- **Elevator plus pivot.** The elevator sets the height, and a pivot on the carriage angles the end effector toward the goal. This was the most common design among top robots in 2025.
+- **Pivot plus elevator ("telescoping arm").** An arm that also extends along its length. It reaches high and far, but its gravity load depends on both the angle and the extension.
+- **Two-joint arm.** A shoulder and an elbow. It can reach many points, but it is hard to control: each joint's gravity load depends on the other joint's angle ([Compound Arms](/docs/guides/ctre/torque-current#334-compound-arms-multi-joint)).
+
+The more joints, the more places the robot can reach, and the more ways it can hit itself. That is the job of the [superstructure](/docs/mechanisms/superstructure).
+
+## 4.4 Center of gravity and tipping
+
+Raising an elevator or an arm raises the robot's **center of gravity**: the point where its weight acts on average. A robot with a high center of gravity tips over more easily when it accelerates, brakes, turns hard, or gets hit.
+
+Teams handle this in a few ways:
+
+1. **Keep heavy parts low.** Put the battery, motors, and electronics as low in the frame as you can. Make the parts that go up as light as you can.
+2. **Lower everything before driving.** Bring the elevator and arm down after scoring, before the robot drives across the field.
+3. **Limit the drivetrain while extended.** Many teams lower the drivetrain's top speed and acceleration in code while the elevator is up, scaled by its height.
+
+## 4.5 Climbers
+
+A **climber** lifts the whole robot in the endgame. It uses the same mechanisms as the rest of the robot, but with a much larger load: the robot's full weight.
+
+| Game | What robots climbed | Typical climber |
+|:---|:---|:---|
+| **2022 Rapid React** | Four rungs at rising heights | Hooks on arms that reached from one rung to the next, swinging the robot up the bars |
+| **2024 Crescendo** | A chain hanging from the stage | Hooks on a lift that reached up, caught the chain, and pulled down |
+| **2025 Reefscape** | A cage hanging from the barge | A pivoting arm that grabbed the cage and swung the robot up. Some used a V-shaped hook with a latch that locked once the cage slid in |
+| **2026 Rebuilt** | Rungs on the tower, 27, 45, and 63 in up | Hooks on lifts or arms that pulled the robot up to a rung |
+
+What to know about climbers:
+
+- **The load is the whole robot.** Expect a large gear reduction, and check the motors' **stator** current while pulling. A stalled climber can overheat a motor in seconds.
+- **It has to hold with the power off.** The robot is disabled when the match ends, and climb points are usually counted after that. Use a ratchet, a brake, or a gearbox that the robot's weight can't turn backward.
+- **Control the force, not just the position.** A climber that pulls to a position can tear itself off the bar if something catches. Pulling with a set current gives a set force ([Force-Limited Deployment](/docs/guides/ctre/torque-current#351-force-limited-deployment)).

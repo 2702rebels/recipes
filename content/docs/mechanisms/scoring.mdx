@@ -1,0 +1,107 @@
+---
+title: Shooters and End Effectors
+description: How FRC robots score. Flywheel shooters with hoods and turrets for shooting games, and end effectors that grip and place pieces for pick-and-place games.
+---
+
+A robot scores in one of two ways: it **launches** game pieces into a goal with a **shooter**, or it **places** them with an **end effector**, the "hand" at the end of a mechanism. In short:
+
+1. **A shooter is one or more flywheels.** The wheels spin up to speed and fling the piece out. What matters is that each shot leaves at the same speed.
+2. **Aiming means setting three things:** the shot's speed, its angle above the floor, and its direction across the field. A hood sets the angle, and a turret or the drivetrain sets the direction.
+3. **An end effector grips, holds, and releases.** Rollers are the most common design, because they intake and score with the same motor.
+4. **Placing needs precision more than speed.** A pick-and-place robot has to put a piece in the same spot every time, so its end effector rides on mechanisms that can reach exact positions.
+
+## 3.1 Two ways to score
+
+| | Shooter | End effector |
+|:---|:---|:---|
+| **How it scores** | Launches the piece through the air | Carries the piece to the goal and lets go |
+| **Where the robot can be** | Anywhere in range of the goal | Right next to the goal |
+| **What limits it** | Accuracy at range, and how fast it can shoot | How fast and precisely it can reach the goal |
+| **Typical games** | 2022 Rapid React, 2024 Crescendo, 2026 Rebuilt | 2023 Charged Up, 2025 Reefscape |
+
+Some robots do both. In 2024, many robots shot notes into the speaker and placed them in the amp with the same shooter, run slowly. In 2025, some robots placed coral on the reef with their end effector and then threw algae into the net.
+
+## 3.2 Shooters
+
+A **flywheel** is a heavy wheel that spins fast. A flywheel shooter squeezes the game piece between the spinning wheel and another surface, and the wheel throws it out. There are two common layouts:
+
+- **Flywheel and hood.** One set of wheels pushes the piece along a curved plate, the **hood**. The piece leaves with **backspin** (spinning backward), which makes balls fly a flatter, more predictable path. Many ball shooters in 2022 and 2026 used this layout.
+- **Two sets of wheels.** The piece passes between two sets of wheels, one above and one below (or one on each side). Running them at different speeds sets the spin. Many 2024 note shooters worked this way.
+
+What makes a shooter accurate:
+
+- **Same speed every shot.** The shot travels as far as the speed it leaves at. Hold the flywheel at its target speed with closed-loop velocity control.
+- **Fast recovery.** A piece passing through slows the flywheel down. If the robot shoots again before the wheel is back to speed, the next shot falls short. A heavier flywheel slows down less, but takes longer to spin up. A controller that recovers speed quickly helps either way ([Torque vs. Voltage for Flywheels](/docs/guides/ctre/torque-current#314-torque-vs-voltage-for-flywheels)).
+- **Consistent feeding.** The indexer should push every piece into the flywheel at the same speed and position.
+- **No dead zones.** A **dead zone** is a spot along the path where no wheel, roller, or hood holds the piece, such as a gap between the indexer and the flywheel, or between two sets of wheels. There the piece coasts, slows down, and can pick up random spin, so each shot leaves a little differently. Keep the piece held by a roller, a wheel, or the hood from the indexer all the way out.
+- **Consistent pieces.** Foam and rubber pieces wear down over a competition. Test with used pieces, not just new ones.
+- **The right compression.** Shooters for squashable pieces, such as foam balls and notes, use solid flywheels and squeeze the piece against the hood or the other wheels. How much the piece is squeezed changes how fast it leaves, so set the gap by testing and keep it fixed ([Matching wheels to the piece](/docs/mechanisms/intakes#211-matching-wheels-to-the-piece)).
+
+### 3.2.1 Volley or stream
+
+In 2026, a robot could carry as much fuel as its hopper held, and shooters split into two types:
+
+| | Dumper | Stream shooter |
+|:---|:---|:---|
+| **Shooter** | Wide and fixed to the robot, with many flywheels side by side | Narrow, on a turret |
+| **How it shoots** | Empties the hopper in one big volley | Shoots a continuous stream, one ball right after another |
+| **How it aims** | Turns the whole robot | Turns the turret, so the robot can drive any direction while it shoots |
+| **How fuel reaches the shooter** | A spindexer or rolling floor pushes fuel across the shooter's width | An indexer or a dye rotor ([Indexers and hoppers](/docs/mechanisms/intakes#24-indexers-and-hoppers)) feeds one ball at a time |
+
+The shooting robot in the figure on [Robots as Subsystems](/docs/mechanisms/subsystems#12-what-a-subsystem-is) is a stream shooter.
+
+## 3.3 Aiming
+
+Every shot has a speed, an angle above the floor, and a direction across the field. A robot sets each one with a mechanism:
+
+| What to set | Mechanism | Examples |
+|:---|:---|:---|
+| **Speed** | The flywheel speed | Every shooter |
+| **Angle** | A hood that moves, or a shooter that pivots as a whole | Moving hoods in 2022 and 2026. In 2024, many robots pivoted the whole shooter to aim up at the speaker |
+| **Direction** | A **turret**, which rotates the shooter on top of the robot, or the drivetrain, which turns the whole robot | Turrets in 2022 and 2026. Many swerve robots in 2024 turned the whole robot instead |
+
+The right speed and angle depend on how far away the goal is. Most teams measure them on the practice field: they shoot from several distances, record the speed and hood angle that score at each one, and put the results in a table. On the field, the robot looks up its distance in the table and blends between the nearest entries. WPILib's `InterpolatingDoubleTreeMap` does this blending.
+
+To know its distance from the goal, the robot needs to know where it is on the field. That comes from vision and odometry: see [Vision](/docs/vision) and [Localization](/docs/localization).
+
+**Turret or drivetrain?** A swerve robot can face any direction while it drives ([Why Swerve](/docs/swerve-drive/drivetrains#15-what-swerve-gives-you)), so many teams aim with the drivetrain and skip the turret. A turret is still faster and more precise than turning a whole robot. It also lets the robot aim while it drives in any direction, and keep aiming while it is being pushed.
+
+**Shooting on the move.** If the robot is moving when it shoots, the piece carries the robot's velocity with it. To score, the robot aims at a point shifted against its own motion, by its velocity times the time the piece spends in the air. This takes good localization and a fast, accurate turret or drivetrain. Top teams did it in 2022 and 2026.
+
+## 3.4 End effectors
+
+An **end effector** grips a game piece, holds it while the robot moves, and lets go at the goal. Common designs:
+
+| Design | How it works | Notes |
+|:---|:---|:---|
+| **Rollers** | Spinning wheels or belts pull the piece in and push it out | The most common. One motor both intakes and scores, and rollers are forgiving when the piece is a little off. Use compliant wheels for rigid pieces such as coral ([Matching wheels to the piece](/docs/mechanisms/intakes#211-matching-wheels-to-the-piece)) |
+| **Claw** | Jaws close on the piece, often driven by a pneumatic cylinder | Grips firmly, but has to be lined up well to close on the piece |
+| **Suction** | A vacuum cup holds a flat face of the piece | Rare. Works only on pieces with a smooth, flat face |
+
+An end effector often sits on a **wrist**, a small pivot that sets the angle the piece is held at. The wrist lets the robot reach a goal at an angle, such as the 2025 reef branches at L2 and L3, which tilt up at 35°, and the vertical branches at L4.
+
+Recent examples:
+
+- **2023 Charged Up.** Cones went on poles and cubes went on shelves, at three heights. Many robots used one roller end effector that could hold either piece, and turned it with a wrist to score each piece at the right angle.
+- **2025 Reefscape.** Coral went on branches at four levels. Most competitive robots carried a roller end effector on an elevator, often with a pivot to angle it toward the branch. Many also used it, or a second set of rollers, to remove algae from the reef and score it.
+
+## 3.5 Placing precisely
+
+Shooting rewards range. Placing rewards precision: a piece has to land on a peg or branch only a few inches wide. Three things make that possible:
+
+1. **Line up the robot.** Drivers can't see the goal well from across the field. Many teams **auto-align**: the robot drives itself to the scoring position using AprilTags on the field ([Vision](/docs/vision)).
+2. **Reach the same pose every time.** The elevator, arm, and wrist have to settle at the same height and angle on every cycle. That is a tuning job ([Five Mechanisms to Tune](/docs/mechanisms/control-types)).
+3. **Hold the piece the same way every time.** If the piece can slide around in the end effector, the robot's pose doesn't tell you where the piece is. Use a sensor to stop the piece at the same spot ([Intakes and Indexers](/docs/mechanisms/intakes#25-knowing-when-you-have-a-piece)).
+
+## 3.6 Controlling shooters and end effectors
+
+| Mechanism | Tunes like | Controller holds |
+|:---|:---|:---|
+| Shooter flywheel | Flywheel | Speed |
+| Hood | Arm, or linear deployment if its travel is short | Angle |
+| Pivoting shooter | Arm | Angle |
+| Turret | Turret | Angle |
+| End effector rollers | Flywheel, usually run open loop | Speed, or just a voltage |
+| Wrist | Arm | Angle |
+
+[Five Mechanisms to Tune](/docs/mechanisms/control-types) explains why, and links to the tuning procedure for each.

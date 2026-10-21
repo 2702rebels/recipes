@@ -1,0 +1,102 @@
+---
+title: Intakes and Indexers
+description: How FRC robots pick up game pieces from the floor or a station, hold and feed them, and sense when they have one, with examples from recent games.
+---
+
+An **intake** picks up game pieces. An **indexer** takes them from the intake, holds them, and feeds them to whatever scores them. The intake is often the subsystem that decides how fast a robot cycles: a robot that can't pick pieces up quickly can't score them quickly. In short:
+
+1. **Touch it, own it.** The best intakes grab a piece the moment they touch it, from a wide range of angles. Width and roller speed matter more than anything else.
+2. **Pick where the pieces are.** Floor intakes pick pieces up anywhere. Station intakes take them from a human player. Many robots need both.
+3. **Deploy only if you have to.** An intake that reaches past the bumper reaches more pieces but gets hit more. An intake inside the frame is safer but needs a game piece that fits under or through the bumper.
+4. **Know whether you hold a piece.** In most games, a sensor that sees the piece lets the robot stop the intake and move on to scoring by itself.
+
+## 2.1 What makes a good intake
+
+Teams say a good intake is **"touch it, own it"**: once any part of the intake touches a game piece, the piece ends up inside the robot. Getting there takes a few things:
+
+- **Width.** A wide intake gives the driver a large target. A full-width intake (as wide as the robot) can grab a piece the driver only roughly lines up with.
+- **Roller speed.** If the rollers' surface moves slower than the robot drives, the robot pushes pieces away instead of pulling them in. A common rule of thumb is to make the roller surface at least twice as fast as the robot's top drive speed.
+- **Grip on any piece.** Game pieces vary in size, firmness, and wear over a season. Pick wheels to match the piece: soft wheels for hard pieces, hard wheels for soft ones ([Matching wheels to the piece](#211-matching-wheels-to-the-piece)).
+- **Strength.** The intake is usually the first part of the robot to hit walls, game elements, and other robots. Build it to take hits, or keep it inside the frame when it is not in use.
+
+### 2.1.1 Matching wheels to the piece
+
+Something has to give where a wheel meets a game piece. If neither the wheel nor the piece gives, the wheel touches the piece at a point, slips, and jams on small changes in size. If both give, the grip changes from piece to piece. So make exactly one of them soft:
+
+| Game piece | Wheels | Why | Examples |
+|:---|:---|:---|:---|
+| **Rigid** (hard plastic, PVC) | **Compliant wheels**: soft rubber or foam wheels that squash | The wheel wraps around the piece, grips more of it, and absorbs differences in size and position | 2023 cones, 2025 coral |
+| **Squashable** (foam, inflated balls) | **Solid wheels** or rollers: hard plastic, metal, or firm tread that doesn't squash | The piece squashes instead, and the grip comes from how much it squashes | 2022 cargo, 2024 notes, 2025 algae, 2026 fuel |
+
+With a squashable piece, the gap between the rollers (or between a roller and a plate) sets the grip. The amount the gap is smaller than the piece is called **compression**. Too little compression and the rollers slip. Too much and the piece jams or the motor stalls. Find the right amount by testing, and make the gap easy to adjust. Test with worn pieces too: foam and rubber get softer over a competition, which changes the grip.
+
+## 2.2 Floor and station intakes
+
+Pieces come from two places: the floor, and **stations** along the field walls where human players feed them in.
+
+| Intake | Strengths | Weaknesses |
+|:---|:---|:---|
+| **Floor (ground) intake** | Picks up pieces anywhere: spilled pieces, pieces staged on the field for autonomous, pieces other robots dropped | Larger, heavier, and harder to design. Has to work at any approach angle |
+| **Station intake** | Simple, often just a funnel or a shelf grabber. The human player puts the piece in the same place every time | Every cycle has to go back to the station, which other robots can block |
+
+Recent examples:
+
+- **2023 Charged Up.** Cones were hard to pick up off the floor because they could lie on their side. Many robots took cones and cubes from the shelf of the double substation, where they stood upright.
+- **2024 Crescendo.** Notes lay flat on the floor and were easy to pick up, so floor intakes were the norm. Notes staged in the middle of the field made autonomous routines with many notes possible.
+- **2025 Reefscape.** Human players fed coral down a chute at the coral station. Many robots used a funnel that caught the coral and guided it into the end effector. Stronger robots could also pick up coral that fell or was staged on the field. Some had no separate intake at all: the arm swung its end effector down past the bumper and picked coral straight off the carpet.
+- **2026 Rebuilt.** Hundreds of fuel balls covered the field, so a wide floor intake was the main way to get them. A common design was a single full-width roller on a slide that pushed it out past the bumper. The human player could also feed fuel to a robot from the outpost.
+
+## 2.3 Over, under, and through the bumper
+
+Every robot has bumpers around its frame. An intake has to get pieces past them.
+
+| Style | How it works | Good for |
+|:---|:---|:---|
+| **Over the bumper** | The intake **deploys** (moves out) past the bumper and pulls pieces up and over it | Most pieces, including large balls. Needs a deploy mechanism |
+| **Under the bumper** | A gap under the bumper lets a flat piece slide in | Low, flat pieces such as the 2024 notes. Nothing to deploy, and nothing sticks out |
+| **Station funnel** | A funnel inside the frame catches pieces from a station | Station-only intakes, such as the 2025 coral funnels |
+
+An over-the-bumper intake has to deploy, and the game manual limits how far a robot may reach past its frame perimeter. The limit changes each year: 48 in for 2023, 12 in for 2024 and 2026, and 18 in for 2025.
+
+Intakes deploy one of two ways:
+
+- **On a pivot**, also called a **slapdown** intake. The intake swings out and down on an axle. This is the most common design. From the point of view of the controller, it is an arm ([Five Mechanisms to Tune](/docs/mechanisms/control-types#61-the-five-types)).
+- **On a slide.** The intake moves straight out on rails. It is a linear deployment. Many 2026 robots deployed their intakes this way.
+
+| | Pivot (slapdown) | Slide |
+|:---|:---|:---|
+| **Space when stowed** | Little. It folds up vertically inside the frame perimeter | More. It needs room inside the robot for its whole stroke |
+| **Holding position** | Harder. Game pieces push the rollers up as they come in, so the pivot has to fight to stay level | Easier. Moving in a straight line is simpler to hold than a swinging arm |
+| **Head-on hits** | More likely to break. The structure is rigid, with nowhere to give | Better. A hit pushes the slide back in along its rails |
+| **Building it** | Simpler. A pivot is an axle and a gearbox | Harder. Rails that stay smooth and straight after hits take care to make |
+
+An intake that is deployed can hit things and be hit. Pull it back in when the robot isn't intaking, and make sure the deploy mechanism can be driven back in, or survive, if it gets bent.
+
+## 2.4 Indexers and hoppers
+
+Once a piece is inside the robot, something has to hold it and move it to the scoring mechanism.
+
+- **An indexer** moves pieces through the robot one at a time, with rollers or belts. It stops each piece at a known spot, so the robot knows where it is. Then it feeds the piece to the shooter at a steady speed when the robot is ready to score. A shooter is only as consistent as the way its pieces are fed in. Some 2026 robots used a **dye rotor**, named after a paintball loader: a spinning drum at the bottom of a round hopper that catches balls in slots and feeds them, one at a time, up to a turret above its center.
+- **A hopper** stores many pieces. It matters in games where a robot may carry many pieces at once. In 2022, a robot could control at most two cargo, so most robots used a short indexer. In 2026, there was no limit on how much fuel a robot could control, so many robots built large hoppers, and some made the hopper expand once the match started. A hopper full of balls jams easily, so 2026 hoppers had a floor that moved the balls. A **spindexer** is a floor that spins about a vertical axis and carries balls around to the opening of the indexer. A **rolling floor** is a bed of rollers that pushes balls toward the shooter.
+- **A handoff** passes a piece from one mechanism to another: from an intake to a shooter, or from a funnel to an end effector. Handoffs are a common source of jams, because the piece has to be in the right place at the right time on both sides. They are also where a [superstructure](/docs/mechanisms/superstructure) has to be careful, since two mechanisms meet there.
+
+## 2.5 Knowing when you have a piece
+
+The robot should typically know whether it holds a game piece, and where. With that knowledge, it can stop the intake by itself, tell the driver (by rumbling the controller or changing LED colors), and move to the next step of the cycle. Some games don't need it. In 2026, robots carried a hopper full of fuel and shot until it was empty, so tracking each ball didn't help. Common sensors:
+
+| Sensor | How it works | Notes |
+|:---|:---|:---|
+| **Beam break** | An infrared emitter shines at a receiver. A piece in between breaks the beam | Simple and fast. The piece has to block the beam |
+| **Distance sensor** | Measures the distance to the nearest object with infrared light (time of flight) | Sees a piece without a separate receiver. Can also tell where along the path the piece is |
+| **Limit switch** | A small switch that the piece presses | Cheap, but the piece has to push it, and switches wear |
+| **Motor current** | Roller **stator** current rises when a piece loads the rollers | Needs no extra sensor, but it is noisy and changes with speed and wear. Filter it and wait for it to stay high for a short time |
+
+Use a real sensor where you can. Current detection is a good backup, and it may be the only option for some mechanisms.
+
+## 2.6 Controlling an intake
+
+Intake and indexer rollers are flywheels from the controller's point of view: they spin at a speed, with no gravity load. Most teams run them **open loop**: they command a fixed voltage, with no feedback. Use closed-loop velocity control when the speed has to be consistent, such as for an indexer that feeds a shooter.
+
+A stator current limit keeps a jammed roller from overheating its motor. In torque-current mode, the current cap acts like a slip clutch: the rollers push with a set force and stop when a piece jams ([Choosing a Control Mode](/docs/guides/ctre/selection#43-mixed-mode-strategies)).
+
+The deploy mechanism is a pivot or a slide, tuned as an arm or a linear deployment. See [Five Mechanisms to Tune](/docs/mechanisms/control-types).
