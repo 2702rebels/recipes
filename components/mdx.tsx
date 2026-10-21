@@ -1,5 +1,6 @@
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import type { MDXComponents } from "mdx/types";
+import type { ComponentType } from "react";
 
 import { Callout } from "@/components/callout";
 import { FactorGraphDiagram } from "@/components/diagrams/localization";
@@ -12,6 +13,7 @@ import {
 } from "@/components/diagrams/vision";
 import { Procedure, ProcedureIndex, ProcedureLinks } from "@/components/procedure";
 import { PrintProcedures } from "@/components/procedure-print";
+import { Resettable } from "@/components/interactive/controls";
 import { BracketingSimulator } from "@/components/interactive/bracketing-simulator";
 import { CalibrationError } from "@/components/interactive/calibration-error";
 import { DistortionGrid } from "@/components/interactive/distortion-grid";
@@ -29,6 +31,37 @@ import { RelativeVsGlobal } from "@/components/interactive/relative-global";
 import { RollingShutter } from "@/components/interactive/rolling-shutter";
 import { TuningSandbox } from "@/components/interactive/tuning-sandbox";
 
+/** Wraps a widget so the reset button in its header can restore the defaults. */
+const resettable = <P extends object>(Widget: ComponentType<P>) => {
+  const Wrapped = (props: P) => (
+    <Resettable>
+      <Widget {...props} />
+    </Resettable>
+  );
+  Wrapped.displayName = `Resettable(${Widget.displayName ?? Widget.name})`;
+  return Wrapped;
+};
+
+/** Interactive widgets. Each gets a reset button through {@link resettable}. */
+const widgets = {
+  BracketingSimulator: resettable(BracketingSimulator),
+  CalibrationError: resettable(CalibrationError),
+  DistortionGrid: resettable(DistortionGrid),
+  EstimatorGain: resettable(EstimatorGain),
+  ExpoExplorer: resettable(ExpoExplorer),
+  FactorGraphSmoother: resettable(FactorGraphSmoother),
+  GravityCalculator: resettable(GravityCalculator),
+  KalmanFilter1D: resettable(KalmanFilter1D),
+  MotorCurves: resettable(MotorCurves),
+  OdometryDrift: resettable(OdometryDrift),
+  OdometryIntegration: resettable(OdometryIntegration),
+  PinholeExplorer: resettable(PinholeExplorer),
+  PoseScatter: resettable(PoseScatter),
+  RelativeVsGlobal: resettable(RelativeVsGlobal),
+  RollingShutter: resettable(RollingShutter),
+  TuningSandbox: resettable(TuningSandbox),
+};
+
 /** Components available in every MDX page without an import. */
 export function getMDXComponents(components?: MDXComponents) {
   return {
@@ -44,22 +77,7 @@ export function getMDXComponents(components?: MDXComponents) {
     PinholeDiagram,
     RelativeGlobalDiagram,
     ShutterTimeline,
-    BracketingSimulator,
-    CalibrationError,
-    DistortionGrid,
-    EstimatorGain,
-    ExpoExplorer,
-    FactorGraphSmoother,
-    GravityCalculator,
-    KalmanFilter1D,
-    MotorCurves,
-    OdometryDrift,
-    OdometryIntegration,
-    PinholeExplorer,
-    PoseScatter,
-    RelativeVsGlobal,
-    RollingShutter,
-    TuningSandbox,
+    ...widgets,
     ...components,
   } satisfies MDXComponents;
 }

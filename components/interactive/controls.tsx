@@ -1,6 +1,17 @@
 "use client";
 
-import { useId, type ReactNode } from "react";
+import { RotateCcw } from "lucide-react";
+import {
+  createContext,
+  Fragment,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { cn } from "@/lib/cn";
 
@@ -105,10 +116,61 @@ export const Readout = ({ label, value, unit, emphasis }: ReadoutProps) => (
   </div>
 );
 
+interface ResetContextValue {
+  reset: () => void;
+  /** How many times the widget has been reset. Zero on first load. */
+  count: number;
+}
+
+const ResetContext = createContext<ResetContextValue | null>(null);
+
+/**
+ * Lets the {@link Widget} inside restore its defaults. Reset remounts the children, so every `useState` goes back to
+ * its initial value and running animations stop. `components/mdx.tsx` wraps every registered widget in one.
+ */
+export const Resettable = ({ children }: { children: ReactNode }) => {
+  const [count, setCount] = useState(0);
+  const value = useMemo(() => ({ reset: () => setCount((c) => c + 1), count }), [count]);
+  return (
+    <ResetContext value={value}>
+      <Fragment key={count}>{children}</Fragment>
+    </ResetContext>
+  );
+};
+
+/** Header button that restores a widget's defaults. Renders nothing outside {@link Resettable}. */
+const ResetButton = () => {
+  const ctx = useContext(ResetContext);
+  const ref = useRef<HTMLButtonElement>(null);
+  const count = ctx?.count ?? 0;
+  // The button remounts with the widget, so give focus back to it after a reset.
+  useEffect(() => {
+    if (count > 0) ref.current?.focus();
+  }, [count]);
+  if (!ctx) return null;
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={ctx.reset}
+      title="Reset to defaults"
+      className="-my-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-fd-muted-foreground transition-colors hover:bg-fd-accent hover:text-fd-foreground print:hidden">
+      <RotateCcw
+        className="size-3.5"
+        aria-hidden
+      />
+      Reset
+    </button>
+  );
+};
+
 /** Card frame shared by all interactive widgets. */
 export const Widget = ({ title, children }: { title: string; children: ReactNode }) => (
   <div className="not-prose my-6 flex flex-col gap-5 rounded-xl border border-fd-border bg-fd-card p-4 text-fd-card-foreground sm:p-5">
-    <div className="text-sm font-semibold tracking-wide text-fd-muted-foreground uppercase">{title}</div>
+    <div className="flex items-start justify-between gap-3">
+      <div className="text-sm font-semibold tracking-wide text-fd-muted-foreground uppercase">{title}</div>
+      <ResetButton />
+    </div>
     {children}
   </div>
 );

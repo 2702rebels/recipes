@@ -116,6 +116,6 @@ To add a new one:
 3. Take motor numbers from `lib/motors.ts` instead of repeating them. It holds the Kraken constants used across the guide.
 4. Put any simulation in a pure function under `lib/` (see `lib/turret-sim.ts` or `lib/vision.ts`), separate from the React code, so it can be checked on its own.
 5. Use theme colors only: `fd-*` Tailwind tokens for UI, and `var(--color-plot-*)` (defined in `app/global.css`) for plot lines, so light and dark mode both work.
-6. Register it in `components/mdx.tsx`, then use it in any page as `<MyWidget />`.
+6. Register it in the `widgets` list in `components/mdx.tsx`, then use it in any page as `<MyWidget />`. The list wraps each widget so the **Reset** button in its header restores the defaults. Reset remounts the widget, so keep all its state in `useState` and `useRef` inside the component.
 
 Keep each widget focused on one idea, give it defaults that match an example in the text, and say what the model leaves out (friction, current limits, and so on).

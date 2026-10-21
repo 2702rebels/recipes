@@ -81,7 +81,7 @@ These rules apply to all prose: pages, callouts, component labels and captions, 
 
 ## Interactive components
 
-- Put widgets in `components/interactive/` as client components (`"use client"`), and register them in `components/mdx.tsx`.
+- Put widgets in `components/interactive/` as client components (`"use client"`), and register them in the `widgets` list in `components/mdx.tsx`. That list wraps each one in `Resettable`, which gives `Widget` its Reset button. Reset remounts the widget, so keep state inside the component (no module-level mutable state) and make the initial state the defaults.
 - Build them from the shared parts: `Widget`, `Slider`, `Segmented`, `Readout` (`controls.tsx`) and `LinePlot` (`plot.tsx`).
 - Take motor data from `lib/motors.ts`, including helpers such as `maxCurrentAt`.
 - Keep simulations in pure functions under `lib/` (e.g. `lib/turret-sim.ts`), separate from React. Before wiring a simulation into a page, run it for the page's worked example and check that the result matches the text (for example with `node` on a small script that imports it by `file:///` URL). Modules that import other `lib/` files without extensions can be run with `node_modules/.bin/jiti script.ts`.
