@@ -43,12 +43,12 @@ Read the pages in order. Each one builds on the one before.
 
 | Idea | One-line summary | Page |
 |:---|:---|:---|
-| Integrate along an arc | Turning each step's movement into field coordinates with the start heading is off by several centimeters per meter while spinning. WPILib's pose exponential is not. | [Basics](/docs/localization/basics#13-integrating-the-pose-exponential) |
-| Random error grows slowly, bias grows fast | Random odometry noise grows with the square root of distance. A wrong wheel diameter grows with distance. | [Basics](/docs/localization/basics#14-how-odometry-error-grows) |
+| Integrate along an arc | Turning each step's movement into field coordinates with the start heading is off by several centimeters per meter while spinning. WPILib's pose exponential is not. | [Localization Basics](/docs/localization/basics#13-integrating-the-pose-exponential) |
+| Random error grows slowly, bias grows fast | Random odometry noise grows with the square root of distance. A wrong wheel diameter grows with distance. | [Localization Basics](/docs/localization/basics#14-how-odometry-error-grows) |
 | Track the uncertainty | A Kalman filter keeps a variance next to the estimate, and uses it to decide how far each measurement moves the estimate. | [Kalman Filters](/docs/localization/kalman-filters#21-one-number-and-its-uncertainty) |
 | Gate bad measurements | Reject a measurement that is too many standard deviations from the prediction. It fails when the robot was really shoved. | [Kalman Filters](/docs/localization/kalman-filters#25-what-a-kalman-filter-assumes) |
-| WPILib's gain is fixed | Each vision measurement moves the estimate by $\sigma_s / (\sigma_s + \sigma_v)$ of the way, however long it has been since the last one. | [WPILib Estimators](/docs/localization/wpilib-estimator#321-the-gain) |
-| Rate matters as much as trust | More measurements per second pull harder, because the gain applies to every one. | [WPILib Estimators](/docs/localization/wpilib-estimator#322-try-it-gain-rate-and-recovery) |
-| Timestamps, in order | Use the capture time, in the right timebase, and add measurements oldest first. | [WPILib Estimators](/docs/localization/wpilib-estimator#33-latency-compensation) |
-| Smooth, don't just filter | A factor graph keeps the recent trajectory and re-solves it, so a later measurement can fix an earlier mistake. | [Factor Graphs](/docs/localization/factor-graphs#41-filtering-vs-smoothing) |
-| Measure in pixels | Tag corners as factors carry the true shape of vision uncertainty, instead of a guessed pose standard deviation. | [Factor Graphs](/docs/localization/factor-graphs#43-factors-for-an-frc-robot) |
+| WPILib's gain is fixed | Each vision measurement moves the estimate by $\sigma_s / (\sigma_s + \sigma_v)$ of the way, however long it has been since the last one. | [WPILib Pose Estimators](/docs/localization/wpilib-estimator#321-the-gain) |
+| Rate matters as much as trust | More measurements per second pull harder, because the gain applies to every one. | [WPILib Pose Estimators](/docs/localization/wpilib-estimator#322-try-it-gain-rate-and-recovery) |
+| Timestamps, in order | Use the capture time, in the right timebase, and add measurements oldest first. | [WPILib Pose Estimators](/docs/localization/wpilib-estimator#33-latency-compensation) |
+| Smooth, don't just filter | A factor graph keeps the recent trajectory and re-solves it, so a later measurement can fix an earlier mistake. | [Factor Graphs and GTSAM](/docs/localization/factor-graphs#41-filtering-vs-smoothing) |
+| Measure in pixels | Tag corners as factors carry the true shape of vision uncertainty, instead of a guessed pose standard deviation. | [Factor Graphs and GTSAM](/docs/localization/factor-graphs#43-factors-for-an-frc-robot) |

@@ -4,6 +4,8 @@ import type { ComponentType } from "react";
 
 import { Callout } from "@/components/callout";
 import { FactorGraphDiagram } from "@/components/diagrams/localization";
+import { DrivetrainComparison } from "@/components/diagrams/swerve";
+import { DrivetrainLayout, MK3Drawing } from "@/components/diagrams/swerve-layout";
 import {
   AprilTagAnatomy,
   FrameChain,
@@ -29,6 +31,9 @@ import { PinholeExplorer } from "@/components/interactive/pinhole-explorer";
 import { PoseScatter } from "@/components/interactive/pose-scatter";
 import { RelativeVsGlobal } from "@/components/interactive/relative-global";
 import { RollingShutter } from "@/components/interactive/rolling-shutter";
+import { SwerveGearing } from "@/components/interactive/swerve-gearing";
+import { SwerveKinematics } from "@/components/interactive/swerve-kinematics";
+import { SwerveSkew } from "@/components/interactive/swerve-skew";
 import { TuningSandbox } from "@/components/interactive/tuning-sandbox";
 
 /** Wraps a widget so the reset button in its header can restore the defaults. */
@@ -59,6 +64,9 @@ const widgets = {
   PoseScatter: resettable(PoseScatter),
   RelativeVsGlobal: resettable(RelativeVsGlobal),
   RollingShutter: resettable(RollingShutter),
+  SwerveGearing: resettable(SwerveGearing),
+  SwerveKinematics: resettable(SwerveKinematics),
+  SwerveSkew: resettable(SwerveSkew),
   TuningSandbox: resettable(TuningSandbox),
 };
 
@@ -72,8 +80,11 @@ export function getMDXComponents(components?: MDXComponents) {
     ProcedureIndex,
     ProcedureLinks,
     AprilTagAnatomy,
+    DrivetrainComparison,
+    DrivetrainLayout,
     FactorGraphDiagram,
     FrameChain,
+    MK3Drawing,
     PinholeDiagram,
     RelativeGlobalDiagram,
     ShutterTimeline,

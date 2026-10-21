@@ -59,7 +59,7 @@ Things to try:
 
 ## 2.3 More than one number
 
-A robot pose has three numbers. The filter then keeps a **state vector** $\hat{\mathbf{x}} = [x, y, \theta]^\top$ and a 3×3 **covariance matrix** $P$ (see [Basics §1.4.1](/docs/localization/basics#141-describing-uncertainty)). The same two steps become matrix equations:
+A robot pose has three numbers. The filter then keeps a **state vector** $\hat{\mathbf{x}} = [x, y, \theta]^\top$ and a 3×3 **covariance matrix** $P$ (see [Localization Basics §1.4.1](/docs/localization/basics#141-describing-uncertainty)). The same two steps become matrix equations:
 
 $$
 \text{Predict:}\quad \hat{\mathbf{x}} \leftarrow f(\hat{\mathbf{x}}, \mathbf{u}), \qquad P \leftarrow F P F^\top + Q
@@ -70,7 +70,7 @@ $$
 $$
 
 Where:
-- $f$ moves the state by the odometry twist $\mathbf{u}$ ([Basics §1.3](/docs/localization/basics#13-integrating-the-pose-exponential)), and $F$ is how a small change in the state changes the result
+- $f$ moves the state by the odometry twist $\mathbf{u}$ ([Localization Basics §1.3](/docs/localization/basics#13-integrating-the-pose-exponential)), and $F$ is how a small change in the state changes the result
 - $h$ predicts the measurement from the state, and $H$ is how a small change in the state changes the prediction. For a vision pose, $h$ just returns the pose, and $H = I$.
 - $Q$ and $R$ are now covariance matrices, for odometry and for the measurement
 
@@ -103,7 +103,7 @@ $$
 \left| z - \hat{x} \right| > 3\sqrt{P + R} \quad\Rightarrow\quad \text{reject}
 $$
 
-A gate works well until the model is wrong. After a shove the wheels didn't see, every good measurement looks like an outlier, and the gate rejects them. The filter only recovers once $P$ has grown enough for the gate to open. [Factor Graphs §4.5](/docs/localization/factor-graphs#45-try-it-filter-vs-smoother) shows this happening, and a different way to handle outliers.
+A gate works well until the model is wrong. After a shove the wheels didn't see, every good measurement looks like an outlier, and the gate rejects them. The filter only recovers once $P$ has grown enough for the gate to open. [Factor Graphs and GTSAM §4.5](/docs/localization/factor-graphs#45-try-it-filter-vs-smoother) shows this happening, and a different way to handle outliers.
 
 Delayed measurements need **latency compensation**: apply the measurement at the time the image was captured, then redo the odometry since then. WPILib's pose estimators do this ([§3.3](/docs/localization/wpilib-estimator#33-latency-compensation)).
 

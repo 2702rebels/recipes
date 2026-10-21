@@ -63,7 +63,7 @@ An error in any of the three terms moves the result. The layout and mount errors
 
 ## 4.2 The pinhole camera
 
-A camera maps 3D points to 2D pixels. The **pinhole model** describes this with a few numbers, and works well for most lenses once distortion is removed (see [Calibration](/docs/vision/calibration)).
+A camera maps 3D points to 2D pixels. The **pinhole model** describes this with a few numbers, and works well for most lenses once distortion is removed (see [Camera Calibration](/docs/vision/calibration)).
 
 <PinholeDiagram />
 
@@ -204,7 +204,7 @@ The homography guess is close but not the best fit, because it minimizes an alge
 
 Rotations are updated with a small rotation vector $\omega$, as $R \leftarrow \exp([\omega]_\times)\,R$, so the result is always a valid rotation.
 
-The widgets on these pages use exactly these two stages (`lib/vision.ts` in this site's source).
+The widgets on these pages use exactly these two stages.
 
 ### 4.4.3 The planar ambiguity
 
@@ -275,6 +275,6 @@ A practical pipeline, from one camera frame to the pose estimator:
 
 The formula in step 5 is a heuristic, not a law. It follows from [§4.3](#43-how-far-away-is-the-tag), but it ignores the tag angle, the ambiguity, and calibration errors. Check it against logged data from your robot. [WPILib Pose Estimators §3.2.1](/docs/localization/wpilib-estimator#321-the-gain) shows how these standard deviations turn into a gain.
 
-A factor graph can skip steps 2, 3, and 5. It takes the tag corners in pixels directly, and works out the pose and its uncertainty together with odometry (see [Factor Graphs §4.3](/docs/localization/factor-graphs#43-factors-for-an-frc-robot)).
+A factor graph can skip steps 2, 3, and 5. It takes the tag corners in pixels directly, and works out the pose and its uncertainty together with odometry (see [Factor Graphs and GTSAM §4.3](/docs/localization/factor-graphs#43-factors-for-an-frc-robot)).
 
 Every step here assumes the intrinsics $K$ and the lens distortion are right. [Camera Calibration](/docs/vision/calibration) covers what happens when they aren't.

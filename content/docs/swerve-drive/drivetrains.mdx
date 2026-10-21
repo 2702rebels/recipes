@@ -1,0 +1,97 @@
+---
+title: Why Swerve
+description: Tank, mecanum, and other FRC drivetrains compared. What a holonomic drive is, what swerve does better, and what it costs.
+---
+
+A **drivetrain** is the part of the robot that moves it around the field: the wheels, the motors that turn them, and the gearboxes in between. This page compares the drivetrains FRC teams have used and explains why most competitive teams now use swerve. In short:
+
+1. **Swerve is holonomic.** Where the robot goes and which way it faces are controlled separately. It can shoot, intake, or keep a camera on a tag while it drives.
+2. **It keeps full traction in every direction.** Every wheel is a normal tread wheel turned to face the way the robot moves. Mecanum and omni wheels give up grip to move sideways.
+3. **It costs more in every other way:** eight motors instead of four or six, more money, more weight, more software, and more maintenance.
+4. **Tank drive is still a good choice** for a team that can't afford those costs. It is simple, strong, and hard to break.
+
+## 1.1 What a drivetrain has to do
+
+A robot on a flat field has three things to control: its position along the field ($x$), its position across the field ($y$), and which way it faces (its **heading**, $\theta$). Engineers call these three **degrees of freedom**.
+
+A drivetrain that can control all three at once, each separately, is **holonomic**. A holonomic robot can slide sideways, or drive in a straight line while it spins. A drivetrain that can't is **non-holonomic**. A car is non-holonomic: to move sideways into a parking spot, it has to drive forward and back while turning.
+
+<DrivetrainComparison />
+
+## 1.2 Tank drive
+
+A **tank drive** (also called a skid-steer or differential drive) has wheels on the left and right sides that all point forward. The wheels on one side are geared together and driven by the same motors. The robot drives straight when both sides turn at the same speed, and turns when they turn at different speeds. It spins in place when the sides turn in opposite directions.
+
+A **West Coast Drive** is a common way to build one: a row of wheels on each side, cantilevered off a single rail, with the middle wheels set a little lower than the outer ones (a **dropped center**). The robot then rests on fewer wheels at a time, which makes it easier to turn.
+
+**What it does well:**
+
+- **Simple and cheap.** Two gearboxes, four to six motors, and parts any team can build or buy.
+- **Strong.** Every wheel is a tread wheel pointed forward, so the robot pushes hard in a straight line.
+- **Hard to break.** There are few moving parts and nothing to steer.
+
+**What it can't do:**
+
+- **Move sideways.** It controls only two degrees of freedom: forward speed and turn rate. To go somewhere to the side, it has to turn first.
+- **Turn without scrubbing.** While it turns, the wheels at the front and back are dragged sideways across the carpet. That wastes power, wears tread, and makes turns harder the longer the wheelbase.
+- **Face one way while driving another.** Aiming a shooter or a camera means pointing the whole robot, which also changes where it drives.
+
+## 1.3 Mecanum drive
+
+A **mecanum wheel** has small rollers around its rim, set at 45° to the wheel's axle. The rollers spin freely. A mecanum wheel pushes the robot along the line of the roller touching the ground, at 45°, not straight ahead. A robot with four mecanum wheels mixes those pushes to go in any direction, as the diagram shows. Mecanum is holonomic and needs only four motors and no steering.
+
+The price is grip and efficiency:
+
+- **Part of every push is wasted.** Each wheel pushes at 45°. When the robot drives straight, the sideways parts of the four pushes cancel each other. When it strafes, the forward and backward parts cancel.
+- **Rollers grip less than tread.** The robot can't push as hard, and other robots can push it around more easily.
+- **Rollers slip.** Wheel rotations don't match how far the robot moved as well as they do with tread, so odometry (tracking position from the wheels) is worse.
+
+## 1.4 Other drivetrains
+
+Teams have tried many other designs. The common ones:
+
+| Drivetrain | How it works | Holonomic | Main drawback |
+|:---|:---|:---|:---|
+| **Omni (kiwi or X-drive)** | Three or four omni wheels (rollers at 90° to the axle) mounted at angles around the robot | Yes | Very little grip, easy to push around |
+| **H-drive** | A tank drive with omni wheels, plus one sideways omni wheel in the middle | Yes | The sideways wheel is weak, and the omni wheels give up grip |
+| **Butterfly or octocanum** | Each corner switches between a tread wheel and an omni or mecanum wheel, usually with pneumatics | When switched | Heavy and complex, and it can only do one thing at a time |
+| **Swerve** | Four modules, each with a wheel that is driven and steered by its own motors | Yes | Cost, weight, and complexity |
+
+## 1.5 What swerve gives you
+
+A swerve drive has four **modules**, usually one at each corner of the frame. Each module has a tread wheel that a **drive motor** spins and a **steer motor** turns to point in any direction. Software points all four wheels in the right directions and spins each at the right speed ([Swerve Kinematics](/docs/swerve-drive/kinematics)).
+
+That gives swerve the strengths of both tank and mecanum:
+
+1. **Any direction, any heading.** The robot can drive to a scoring position while it turns to face the target, or keep a camera pointed at AprilTags while it drives. Shooting on the move is much easier when the heading doesn't depend on the path.
+2. **Full traction in every direction.** Every wheel is a tread wheel, turned to face the direction of travel. The robot pushes as hard sideways as it does forward, and resists being pushed from any side.
+3. **Faster paths.** The robot never has to stop and turn to change direction. It drives the straight line from one place to the next.
+4. **Better autonomous paths.** A path planner can choose the route and the heading separately, so the robot can turn toward its next target while it is still driving.
+5. **Good odometry.** Wheels roll in the direction they point, without the sideways scrub of a turning tank drive. The wheels agree with each other, so odometry works well ([Localization Basics](/docs/localization/basics#12-odometry-step-by-step)).
+
+Swerve doesn't push harder than tank in a straight line. Both are limited by the same thing: how hard the treads grip the carpet ([Speed, Acceleration, and Traction §5.2](/docs/swerve-drive/performance#52-the-traction-limit)). What swerve adds is that grip in every direction, with no turn needed.
+
+## 1.6 What swerve costs
+
+| Cost | Why |
+|:---|:---|
+| **Money** | Four off-the-shelf modules and eight motors cost far more than a tank drivetrain. |
+| **Weight** | Eight motors, four modules, and their gears take a larger share of the robot's weight limit. |
+| **Software** | Kinematics, module control, encoder offsets, and odometry all have to be right. A sign error makes the robot spin or drive the wrong way. |
+| **Electrical** | Eight motors on the CAN bus, and eight motors drawing from one battery. Current limits matter more ([Speed, Acceleration, and Traction §5.5](/docs/swerve-drive/performance#55-current-and-the-battery)). |
+| **Maintenance** | Bevel gears and steering bearings wear, and tread wears faster than on a tank drive. Modules need regular checks. |
+| **A gyro** | Field-relative driving and odometry need an accurate heading. A gyro that drifts or loses its zero makes the robot hard to drive. |
+| **Steering time** | A module has to turn before it can push in a new direction. Good control keeps this short ([Commanding the Modules](/docs/swerve-drive/module-control)). |
+
+## 1.7 How swerve became common
+
+Teams have built swerve drives in FRC for a long time, but for many years each team had to design and machine its own modules. That limited swerve to teams with a machine shop and a lot of build time. Off-the-shelf modules changed that. The 221 Robotic Systems "Revolution" module was in use by 2011, and later modules from Swerve Drive Specialties (the MK4 shipped in 2021) and REV Robotics (the MAXSwerve, for the 2023 season) made swerve affordable and reliable for many more teams. Vendor software, such as CTRE's swerve API and the swerve classes in WPILib, made it much easier to program.
+
+## 1.8 Choosing a drivetrain
+
+| If your team... | Consider |
+|:---|:---|
+| Is new, or has a small budget or little build time | Tank. It is cheap, strong, and quick to build. |
+| Can afford modules and has someone to own the software | Swerve. Start from a vendor's modules and the vendor's swerve code. |
+
+Swerve is only better if it works. Get a swerve robot driving early in the season, and practice with it. A well-driven tank robot beats a swerve robot that is still being debugged.

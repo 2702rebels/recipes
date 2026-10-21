@@ -37,6 +37,7 @@ lib/procedures.ts        Index of tuning procedures (anchors) for the index page
 lib/vision.ts            Camera projection and PnP solver (homography + Levenberg-Marquardt) for the Vision pages.
 lib/vision-sims.ts       Monte Carlo and sweep scenarios built on lib/vision.ts. lib/odometry-sim.ts is the drift sim.
 lib/localization-sim.ts  Odometry integration, 1-D Kalman filter, WPILib estimator, and factor-graph smoother for the Localization pages.
+lib/swerve.ts            Swerve kinematics, desaturation, and the drive gearing and traction model for the Swerve Drive pages.
 app/                     Next.js routes: landing page, docs layout, search index.
 source.config.ts         Global MDX plugins (remark-math, rehype-katex).
 .github/workflows/       deploy.yml builds and publishes to GitHub Pages on push to main.
@@ -53,6 +54,7 @@ These rules apply to all prose: pages, callouts, component labels and captions, 
 - **Say things once.** Link to the section that explains a concept rather than repeating it.
 - **Use numbered steps with a bold lead-in** for procedures, and tables for decision rules.
 - **Be precise about units.** State whether a gain is in Volts or Amps, and per mechanism or rotor rotation.
+- **Don't mention source files to readers.** Pages, captions, and widget text must not name files such as `lib/motors.ts`. Readers can't see them. Point to the page that explains the content instead. Only the Contributing page, which is written for people working in the repo, names source files.
 
 ## Technical content
 

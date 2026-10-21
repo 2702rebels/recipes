@@ -54,20 +54,20 @@ The residuals are nonlinear in the poses, so the solver works in steps. It linea
 | Factor | Connects | Measures | In GTSAM |
 |:---|:---|:---|:---|
 | **Prior** | One pose | The starting pose, or any pose you know (for example after a reset) | `PriorFactor<Pose2>` |
-| **Odometry** | Two poses in a row | The twist between them, from the kinematics ([Basics §1.2](/docs/localization/basics#12-odometry-step-by-step)) | `BetweenFactor<Pose2>` |
+| **Odometry** | Two poses in a row | The twist between them, from the kinematics ([Localization Basics §1.2](/docs/localization/basics#12-odometry-step-by-step)) | `BetweenFactor<Pose2>` |
 | **Gyro** | One pose, or two in a row | The heading, or the change in heading | A rotation prior, or a between factor on heading only |
 | **Tag corner** | One pose | Where one tag corner appeared in the image, in pixels | `PlanarProjectionFactor1` |
 
 The tag-corner factor is the important one. It predicts where a known corner on the field should appear in the image, from the robot's pose, the camera mount, and the calibration. Its residual is the difference from where the detector found the corner, in pixels. Its noise model is in pixels too: about one pixel, from [AprilTags §3.3](/docs/vision/apriltags#33-how-a-detector-finds-tags).
 
-This changes how vision uncertainty is handled. With a whole-pose measurement, you guess a standard deviation for $x$, $y$, and $\theta$ ([WPILib Estimators §3.4](/docs/localization/wpilib-estimator#34-choosing-standard-deviations)). With corner factors, the solver works out the uncertainty from the geometry. Range to a tag is measured well, and the sideways angle is not, so one tag gives a curved, crescent-shaped cloud of likely poses around it. The scatter on [Pose Estimation §4.5](/docs/vision/pose-estimation#45-many-tags-one-solve) shows the same shape. The factor graph gets it without any tuning.
+This changes how vision uncertainty is handled. With a whole-pose measurement, you guess a standard deviation for $x$, $y$, and $\theta$ ([WPILib Pose Estimators §3.4](/docs/localization/wpilib-estimator#34-choosing-standard-deviations)). With corner factors, the solver works out the uncertainty from the geometry. Range to a tag is measured well, and the sideways angle is not, so one tag gives a curved, crescent-shaped cloud of likely poses around it. The scatter on [Pose Estimation §4.5](/docs/vision/pose-estimation#45-many-tags-one-solve) shows the same shape. The factor graph gets it without any tuning.
 
 It also changes the [single-tag ambiguity](/docs/vision/pose-estimation#443-the-planar-ambiguity). There is no separate PnP solve that has to pick one of two answers. The corners are fit together with odometry and the gyro, starting from the current estimate. The second solution is far from where odometry says the robot is, so the solver normally doesn't go there.
 
 `PlanarProjectionFactor1` was written for FRC: a robot on the floor (a `Pose2`), a fixed field map, and fiducial markers. It has two variants that estimate more:
 
-- **`PlanarProjectionFactor2`** also treats the corner's position on the field as unknown. With a strong prior from the layout, it can absorb small tag placement errors ([Positioning §2.3](/docs/vision/positioning#23-field-layout-errors-bias-vs-spread)).
-- **`PlanarProjectionFactor3`** also treats the camera mount and the calibration as unknown. It can refine the camera's pose on the robot from driving data ([Calibration §5.5](/docs/vision/calibration#55-extrinsics-where-the-camera-is-on-the-robot)).
+- **`PlanarProjectionFactor2`** also treats the corner's position on the field as unknown. With a strong prior from the layout, it can absorb small tag placement errors ([Relative vs. Global Positioning §2.3](/docs/vision/positioning#23-field-layout-errors-bias-vs-spread)).
+- **`PlanarProjectionFactor3`** also treats the camera mount and the calibration as unknown. It can refine the camera's pose on the robot from driving data ([Camera Calibration §5.5](/docs/vision/calibration#55-extrinsics-where-the-camera-is-on-the-robot)).
 
 Adding unknowns needs enough data to pin them down. Estimate the camera mount from a dedicated practice run with many tags in view, then fix it for matches.
 
@@ -163,7 +163,7 @@ Things the Team 100 work ran into:
 ### 4.6.2 Building the graph
 
 1. **Make one pose variable per odometry sample**, keyed by its timestamp. At 50 Hz with a 1 s window, that is 50 poses.
-2. **Add an odometry factor between each pair**, from the twist. Its noise grows with the distance driven ([Basics §1.4](/docs/localization/basics#14-how-odometry-error-grows)).
+2. **Add an odometry factor between each pair**, from the twist. Its noise grows with the distance driven ([Localization Basics §1.4](/docs/localization/basics#14-how-odometry-error-grows)).
 3. **Add a gyro factor on each pose**, with a small heading noise.
 4. **Add corner factors at the capture time.** If no pose exists at that exact time, add one there, with odometry factors to its neighbors. This is how the graph handles latency, with no replay.
 5. **Wrap vision noise models in a robust loss.** Keep the checks that are cheap and certain (off the field, wrong tag ID, too far) before the graph.

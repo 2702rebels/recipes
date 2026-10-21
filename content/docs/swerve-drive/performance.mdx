@@ -1,0 +1,141 @@
+---
+title: Speed, Acceleration, and Traction
+description: How the drive gear ratio, wheel size, robot weight, tread grip, and current limits set a swerve robot's top speed, its acceleration, and the current at which its wheels slip.
+---
+
+A swerve robot's speed comes down to three limits: how fast the motors can spin, how much current they get, and how hard the treads grip the carpet. This page works out each one and shows how the drive gear ratio trades between them. In short:
+
+1. **Free speed** is the motor's free speed, divided by the gear ratio, times the wheel radius. A real robot reaches less.
+2. **Acceleration can't beat traction.** It tops out at about $\mu g$, around 10 m/s², however strong the motors.
+3. **The slip current** is the **stator** current at which the treads break loose. Set the drive stator current limit at or a little below it.
+4. **Pick the gear ratio for the distances you drive.** A faster ratio wins long sprints and loses short ones.
+
+The worked example on this page: a Kraken X60 (FOC) per module, a 6.75:1 drive ratio, 4 in wheels, a 65 kg robot with bumpers and battery, and a tread friction coefficient of 1.1. Motor numbers come from the [Motor Constants](/docs/guides/ctre/motor-constants) page.
+
+## 5.1 Free speed
+
+The **free speed** is how fast the robot would go with the drive motors at their free speed: no load, and the full 12 V. It is the motor's free speed, slowed by the gear ratio $G$, times the wheel radius $r$:
+
+$$
+v_{\text{free}} = \frac{\omega_{\text{free}}}{G} \cdot r
+$$
+
+Where:
+- $\omega_{\text{free}}$ is the motor's free speed in rad/s. A Kraken X60 runs at 5800 RPM with FOC (607 rad/s), and 6000 RPM with trapezoidal commutation.
+- $G$ is the drive gear ratio, motor turns per wheel turn
+- $r$ is the wheel radius in meters (0.0508 m for a 4 in wheel)
+
+For the worked example, $v_{\text{free}} = 607 / 6.75 \times 0.0508 = 4.57$ m/s with FOC, or 4.73 m/s with trapezoidal commutation.
+
+A real robot doesn't reach the free speed. Friction in the gears and treads, and the battery's voltage dropping under load, take some away. A rough rule is 80 to 90% of the free speed. Measure your own robot's top speed and use that for path planning. CTRE's swerve API calls the speed at 12 V `SpeedAt12Volts` and uses it for open-loop driving.
+
+## 5.2 The traction limit
+
+The treads can push only so hard before they slip. The most force a wheel can put on the carpet is the **coefficient of friction** $\mu$ times the weight on it. For the whole robot, that is $\mu m g$, so the most it can accelerate is
+
+$$
+a_{\text{max}} = \frac{\mu m g}{m} = \mu g
+$$
+
+Where:
+- $\mu$ is the coefficient of friction between the tread and the carpet. Common treads on FRC carpet are around 1, but it depends on the tread and how worn it is. This page assumes 1.1.
+- $m$ is the robot's mass in kg
+- $g$ is 9.81 m/s²
+
+The mass cancels. A heavier robot pushes harder, but it also has more to move. With $\mu = 1.1$, the most any robot can accelerate is 10.8 m/s². More motors, more current, or a lower gear can't beat it. They only spin the wheels.
+
+This is why a swerve robot doesn't push harder than a tank robot of the same weight and tread. Both are limited by $\mu m g$. For the worked example that is $1.1 \times 65 \times 9.81 = 701$ N.
+
+**How heavy?** In 2026, the robot can weigh up to 115 lb (52.2 kg) without bumpers and battery, and up to 135 lb (61.2 kg) with bumpers (game manual rules R103 and R408). The battery adds about 6 kg on top of that. So most competition robots weigh 55 to 67 kg on the carpet.
+
+## 5.3 Slip current
+
+The **slip current** is the drive motor's **stator** current at which the wheels start to slip. More current than that only spins the wheels. To find it, work back from the traction limit, one module at a time:
+
+1. **Force per wheel.** Each wheel carries a quarter of the weight, so it can push with $F = \mu m g / 4$. For the worked example, $701 / 4 = 175$ N.
+2. **Torque at the wheel.** $\tau_{\text{wheel}} = F \cdot r = 175 \times 0.0508 = 8.91$ N·m.
+3. **Torque at the motor.** The gears multiply torque by $G$, so the motor needs $\tau_{\text{wheel}} / G = 8.91 / 6.75 = 1.32$ N·m.
+4. **Current.** Torque is the torque constant times the stator current, $\tau = k_t I$. For the X60 with FOC, $k_t = 0.0194$ N·m/A, so $I = 1.32 / 0.0194 = 68$ A.
+
+All together:
+
+$$
+I_{\text{slip}} = \frac{\mu m g \, r}{4 \, G \, k_t}
+$$
+
+Set the drive's **stator** current limit at or a little below the slip current. In CTRE's swerve API that is `kSlipCurrent` (`SlipCurrent` in `SwerveModuleConstants`). It becomes the drive motors' `StatorCurrentLimit` and, in torque-current mode, their `PeakForwardTorqueCurrent` / `PeakReverseTorqueCurrent`. A limit above the slip current spins the wheels when the robot accelerates or pushes. Spinning tread grips less than tread that isn't slipping, wears faster, and throws off odometry.
+
+The formula is a starting point. It assumes the weight is shared equally, but a robot that accelerates hard shifts weight onto its back wheels. Real $\mu$ also varies with the carpet and tread wear. Measure the real slip current with the wall test in [Swerve Tuning §5.4](/docs/guides/swerve#54-slip-current).
+
+## 5.4 Choosing a gear ratio
+
+The drive ratio trades top speed against acceleration. With the stator current held at its limit, the robot's acceleration is
+
+$$
+a = \frac{4 \, k_t \, I_{\text{limit}} \, G}{r \, m}
+$$
+
+up to the traction limit $\mu g$. A higher $G$ (a slower ratio) gives more acceleration from the same current, but a lower top speed. A lower $G$ gives the reverse.
+
+For the worked example with a 60 A stator limit, from a standing start:
+
+| Drive ratio | Free speed (m/s) | Slip current, stator (A) | Starting acceleration (m/s²) | Time for 2 m (s) | Time for 5 m (s) | Time for 8 m (s) |
+|:---|:---|:---|:---|:---|:---|:---|
+| 4.71:1 | 6.55 | 98 | 6.6 | 0.78 | 1.26 | 1.72 |
+| 5.50:1 | 5.61 | 84 | 7.8 | 0.72 | 1.26 | 1.79 |
+| 6.12:1 | 5.04 | 75 | 8.6 | 0.69 | 1.29 | 1.88 |
+| 6.75:1 | 4.57 | 68 | 9.5 | 0.68 | 1.34 | 1.99 |
+| 8.14:1 | 3.79 | 56 | 10.8 (traction) | 0.71 | 1.50 | 2.29 |
+
+The best ratio depends on the distance. Over 2 m, 6.75:1 is fastest. Over 5 m, the faster ratios tie. Over 8 m, the fastest ratio wins by a quarter second. The slowest ratio loses everywhere: it reaches the traction limit, so its extra torque is wasted, and its top speed is low.
+
+The faster ratios also need a higher current limit to reach the slip current. At 60 A they are **current-limited**: the wheels could take more current before slipping. Raising the limit helps them, but costs battery current ([§5.5](#55-current-and-the-battery)).
+
+To choose, think about the game. Measure how far your robot usually drives between scoring and collecting, and pick the ratio that covers that distance fastest. Remember that a real robot is slower than this model, especially near top speed.
+
+<SwerveGearing />
+
+The widget starts at the worked example with a 60 A stator limit, below the 68 A slip current.
+
+Things to try:
+
+- **Drag the gear ratio.** The dashed line is 6.75:1 for comparison. A faster ratio starts slower but keeps climbing. Watch the "Time to drive 5 m" readout.
+- **Raise the stator current limit above the slip current.** The start becomes traction-limited, at 10.8 m/s². More current doesn't help.
+- **Lower the friction coefficient to 0.8** (worn tread). The slip current drops to 49.5 A, and a 60 A limit now spins the wheels.
+- **Make the robot heavier.** The slip current goes up, but the acceleration goes down when the robot is current-limited.
+
+## 5.5 Current and the battery
+
+The drive motors draw from one battery. The **stator** current is what makes torque. The **supply** current is what the battery delivers. They differ a lot at low speed. A motor at stall, held at 60 A stator current, uses only a small part of the battery's voltage, so its supply current is small. Near top speed, the two are almost the same.
+
+So the battery feels the drive most when the robot is already fast and still accelerating. Four drive motors at a 60 A stator limit, near top speed, draw close to 240 A of supply current together, before the steer motors and the rest of the robot. The battery's voltage sags under that load. If it falls too far, the roboRIO starts shutting outputs off to protect itself (a **brownout**).
+
+Two ways to protect the battery:
+
+1. **Keep the stator limit no higher than you need.** It sets the starting acceleration, which traction caps anyway.
+2. **Add a supply current limit** (`SupplyCurrentLimit`) on the drive motors. It caps current at high speed, where the stator limit doesn't help.
+
+[Motor Constants](/docs/guides/ctre/motor-constants) explains the difference between the two currents, and the `MotorCurves` widget there shows both at every speed.
+
+## 5.6 Turning
+
+The fastest the robot can spin in place is when every module runs at its top speed, along a circle around the center:
+
+$$
+\omega_{\text{max}} = \frac{v_{\text{free}}}{R}
+$$
+
+Where $R$ is the distance from the robot's center to each module. For modules on a 0.58 m square, $R = 0.41$ m, so $\omega_{\text{max}} = 4.57 / 0.41 = 11.1$ rad/s, about 640°/s.
+
+Turning and driving share the module's speed ([Swerve Kinematics §3.5](/docs/swerve-drive/kinematics#35-desaturation)). At full speed forward, the robot can't turn without slowing down. The widget on the [Swerve Kinematics](/docs/swerve-drive/kinematics#32-one-module) page shows how much.
+
+## 5.7 What the model leaves out
+
+The widget and the numbers on this page assume:
+
+- The battery holds 12 V at the motors. In a real sprint it sags, so a real robot is slower near top speed.
+- No losses in the gears or the treads, and no drag from the carpet.
+- The weight is shared equally by the four wheels, and $\mu$ is the same everywhere.
+- Full throttle in a straight line, from rest. A robot driven by a driver or a path follower accelerates more gently.
+
+Use the model to compare choices, such as two gear ratios or two current limits. Use measurements from your robot for the real numbers.

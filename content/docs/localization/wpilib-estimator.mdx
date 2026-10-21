@@ -39,7 +39,7 @@ CTRE's Phoenix 6 `SwerveDrivetrain` has its own pose estimator, on its odometry 
 
 ## 3.2 What it actually does
 
-1. **`update` runs odometry** ([Basics §1.2](/docs/localization/basics#12-odometry-step-by-step)) and stores each odometry pose, with its time, in a buffer that holds the last **1.5 s**.
+1. **`update` runs odometry** ([Localization Basics §1.2](/docs/localization/basics#12-odometry-step-by-step)) and stores each odometry pose, with its time, in a buffer that holds the last **1.5 s**.
 2. **`addVisionMeasurement` looks up the estimate at the capture time**, from the buffer and the corrections made so far.
 3. **It finds the difference** between the vision pose and that estimate, as a `Transform2d` in the robot's frame at that time: forward, left, and turn.
 4. **It scales each of the three by a fixed gain** and records the scaled correction.

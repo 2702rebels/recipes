@@ -1,0 +1,59 @@
+---
+title: Swerve Drive
+description: How a swerve drivetrain works. Its parts and what each one does, the kinematics math, module control, gearing and traction, and why it replaced tank and mecanum drives.
+---
+
+This section explains how a **swerve drive** works. Each of its four wheels sits in a **module** that both spins the wheel and turns it to point anywhere. Pointing all four wheels the right way lets the robot move in any direction, and turn at the same time or not at all. Its direction of travel and the way it faces are independent. A drivetrain that can do this is called **holonomic** ([§1.1](/docs/swerve-drive/drivetrains#11-what-a-drivetrain-has-to-do)). Swerve is the drivetrain most competitive FRC teams use today.
+
+The section starts with why teams moved to swerve from older drivetrains, then takes a module apart, works through the math that turns a joystick input into four wheel commands, and ends with how gearing and traction set the robot's speed. The team's on-carpet tuning procedure is a separate page: [Swerve Tuning](/docs/guides/swerve).
+
+<Callout title="What you need">
+  High-school algebra and a little trigonometry (sine, cosine, and the angle of a vector). Vectors and one matrix
+  appear on the Kinematics page, and each step is explained. Two pages have an interactive widget.
+</Callout>
+
+## Where to start
+
+Read the pages in order. Each one builds on the one before.
+
+<Cards>
+  <Card
+    title="1. Why Swerve"
+    href="/docs/swerve-drive/drivetrains"
+    description="Tank, mecanum, and other drivetrains, what each does well, and what swerve gives you and costs you."
+  />
+  <Card
+    title="2. Anatomy of a Swerve Drive"
+    href="/docs/swerve-drive/anatomy"
+    description="The drive and steer motors, the absolute encoder, gearing, coupling, wheels, and the gyro, and what each one is for."
+  />
+  <Card
+    title="3. Swerve Kinematics"
+    href="/docs/swerve-drive/kinematics"
+    description="Turn a chassis velocity into four module speeds and angles. Field-relative driving, the center of rotation, and desaturation."
+  />
+  <Card
+    title="4. Commanding the Modules"
+    href="/docs/swerve-drive/module-control"
+    description="Never turn more than 90°, slow a wheel that points the wrong way, and the full path from joystick to motor."
+  />
+  <Card
+    title="5. Speed, Acceleration, and Traction"
+    href="/docs/swerve-drive/performance"
+    description="How gear ratio, wheel size, weight, and current limits set top speed, acceleration, and the current at which wheels slip."
+  />
+</Cards>
+
+## Key ideas at a glance
+
+| Idea | One-line summary | Page |
+|:---|:---|:---|
+| Holonomic | A swerve robot controls $x$, $y$, and heading separately. A tank robot has to turn to change direction. | [Why Swerve](/docs/swerve-drive/drivetrains#11-what-a-drivetrain-has-to-do) |
+| Full traction in every direction | Mecanum wheels also move sideways, but push through rollers. Swerve turns the whole tread to face the direction of travel. | [Why Swerve](/docs/swerve-drive/drivetrains#15-what-swerve-gives-you) |
+| Absolute encoder | The steer motor's own encoder forgets where the wheel points at power-up. The absolute encoder doesn't. | [Anatomy of a Swerve Drive](/docs/swerve-drive/anatomy#23-the-absolute-encoder) |
+| One formula per module | Each module moves with the robot's center plus the turn rate times its distance from the center, turned 90°. | [Swerve Kinematics](/docs/swerve-drive/kinematics#32-one-module) |
+| Field-relative | Rotate the driver's request by the gyro heading, so "up the stick" is always "up the field". | [Swerve Kinematics](/docs/swerve-drive/kinematics#34-field-relative-driving) |
+| Desaturate, don't clip | If one module is asked to go too fast, slow every module by the same factor so the robot keeps its direction. | [Swerve Kinematics](/docs/swerve-drive/kinematics#35-desaturation) |
+| Never turn more than 90° | Reverse the wheel and turn the short way instead. | [Commanding the Modules](/docs/swerve-drive/module-control#42-never-turn-more-than-90) |
+| Gearing is a trade | A faster ratio raises top speed but lowers acceleration. The best one depends on how far the robot usually sprints. | [Speed, Acceleration, and Traction](/docs/swerve-drive/performance#54-choosing-a-gear-ratio) |
+| Slip current | The **stator** current at which the treads break loose. Above it, more current only spins the wheels. | [Speed, Acceleration, and Traction](/docs/swerve-drive/performance#53-slip-current) |

@@ -1,0 +1,106 @@
+---
+title: Anatomy of a Swerve Drive
+description: The parts of a swerve module and drivetrain and what each one does. Drive and steer motors, gear ratios, the absolute encoder, coupling, wheels, and the gyro.
+---
+
+A swerve drive is four identical **modules** bolted to the frame, plus a gyro and the software that ties them together. This page takes a module apart and explains what each part is for. In short:
+
+1. **Each module has two motors.** The **drive motor** spins the wheel. The **steer motor** turns the module to point the wheel.
+2. **An absolute encoder tells the steer motor where the wheel points.** It remembers the angle through a power cycle. Its offset has to be set once per module.
+3. **Gear ratios set the module's character.** The drive ratio trades top speed for acceleration. The steer ratio sets how fast and how precisely the module turns.
+4. **The gyro gives the robot's heading.** Field-relative driving and odometry both depend on it.
+
+## 2.1 Inside a module
+
+The drawing below is the layout drawing of the MK3, a module from Swerve Drive Specialties (SDS). The MK3 is discontinued, but its parts are easy to see. The numbers in the drawing match the table.
+
+<MK3Drawing />
+
+| # | Part | What it does | Notes |
+|:---|:---|:---|:---|
+| 1 | **Wheel and tread** | Grips the carpet | Tread wears and compresses, which changes the wheel radius ([§2.5](#25-wheels-and-tread)) |
+| 2 | **Bevel gear** | Turns the drive 90°, from the vertical shaft to the wheel axle | The last stage of the drive gearing |
+| 3 | **Fork** | Holds the wheel and turns with it | Turns on a large bearing in the module plate |
+| 4 | **Steering axis** | The vertical line the wheel turns around | The kinematics needs its position on the robot ([§2.7](#27-the-drivetrain-as-a-whole)) |
+| 5 | **Module plate** | Bolts the module to the frame | On the MK3, eight 1/4-20 threaded holes |
+| 6 | **Gear stages** | Reduce each motor's speed and multiply its torque | The steering stages end at a large gear that turns the fork. The drive stage feeds a shaft down the steering axis. |
+| 7 | **Drive motor** | Spins the wheel to move the robot | A Kraken X60 is the common choice. Runs a velocity loop. |
+| 8 | **Steer motor** (or **azimuth** motor) | Turns the module to point the wheel | Often a Kraken X44 or X60. Runs a position loop. |
+| | **Absolute encoder** | Measures the angle the wheel points, even right after power-up | Hidden in the drawing. On the MK3 it sits in the center of the module and reads the steering angle directly ([§2.3](#23-the-absolute-encoder)). |
+
+The word **azimuth** means the direction the wheel points, measured as an angle. It is used for the steer motor, the steer encoder, and the steer gains.
+
+[SDS's full drawing](https://cdn.shopify.com/s/files/1/0065/4308/1590/files/MK3_Layout_Drawing.PDF) gives the MK3's plate as 5.50 in square, with the steering axis 3.00 in from the plate's two outer edges. SDS sold it with a 12.8:1 steer ratio and a 6.86:1 or 8.16:1 drive ratio.
+
+**Newer modules** have the same parts in a tighter package. SDS's current [MK5n](https://www.swervedrivespecialties.com/products/mk5n-swerve-module), for example, pairs a Kraken X60 drive motor with a Kraken X44 steer motor, uses a 287:11 (about 26.09:1) steer ratio, and encloses the absolute encoder on the steering axis. Its footprint isn't symmetric, so a robot needs two mirror-image versions (SDS calls them A and B). Ready to run, it weighs about 5.9 lb. Four of them are about 24 lb of a 115 lb robot.
+
+## 2.2 Gear ratios
+
+A **gear ratio** says how many times the motor turns for each turn of the output. A drive ratio of 6.75:1 means the drive motor turns 6.75 times for each turn of the wheel.
+
+**Drive ratio.** A lower number (for example 5:1) gives a higher top speed but less acceleration and less force per amp of current. A higher number (for example 8:1) gives the reverse. Module makers sell each module with several drive ratios to choose from. [Speed, Acceleration, and Traction](/docs/swerve-drive/performance#54-choosing-a-gear-ratio) shows how to choose.
+
+**Steer ratio.** Turns of the steer motor per turn of the module. The MK3's is 12.8:1, and the MK5n's about 26.09:1. A higher ratio turns the module more slowly but holds its angle more precisely and against more scrub. Steering only has to turn the module a quarter turn at most ([§4.2](/docs/swerve-drive/module-control#42-never-turn-more-than-90)), so steering speed is rarely the limit.
+
+In CTRE's swerve API, these are `DriveMotorGearRatio` and `SteerMotorGearRatio` in `SwerveModuleConstants`. The Tuner X Swerve Project Generator fills them in from the module you pick.
+
+## 2.3 The absolute encoder
+
+A Kraken has an encoder built into the motor. It is a **relative** encoder: it counts how far the rotor has turned since power-up, and starts from zero every time. That is fine for the drive motor, which only needs speed and distance. It is not enough for steering. After power-up, the steer motor would have no idea which way the wheel points.
+
+An **absolute encoder** solves this. It reads a magnet fixed to the steering axis and reports the angle directly, from the moment it powers up. The steer motor uses it as its feedback sensor. In CTRE's swerve API, the steer motor's feedback source (`SteerFeedbackType`) can be:
+
+| Option | What it does | License |
+|:---|:---|:---|
+| `FusedCANcoder` | Combines the CANcoder's absolute angle with the motor's fast built-in encoder | Phoenix Pro |
+| `SyncCANcoder` | Sets the motor's built-in encoder from the CANcoder, then keeps the two in step | Phoenix Pro |
+| `RemoteCANcoder` | Uses the CANcoder reading directly as feedback | No Pro license needed |
+
+**The offset.** The magnet can be glued in at any angle, so each module's encoder reads some arbitrary value when its wheel points straight ahead. The **encoder offset** removes it. Line up all four wheels to point forward, read each encoder, and store the negative of that reading as the offset (`EncoderOffset` in `SwerveModuleConstants`, which the generator writes for you). On the CANcoder itself the matching config is `MagnetOffset`. An offset that is wrong by a few degrees makes the robot drift sideways or turn while it drives. An offset that is wrong by 180° makes that module drive backward.
+
+<Callout type="tip" title="Redo the offset">
+  Redo the offset whenever a module is taken apart, or its encoder or magnet is moved.
+</Callout>
+
+## 2.4 Coupling
+
+In most modules the drive shaft runs down the middle of the steering axis to the bevel gears ([§2.1](#21-inside-a-module)). Because of that, turning the module also turns the wheel a little, even when the drive motor holds still. The bevel gear rolls around the gear it meshes with.
+
+This **coupling** fools both control and odometry. While the module turns, the drive motor's encoder sees a rotation that didn't move the robot. CTRE's swerve API corrects for it with `CouplingGearRatio`: the number of drive motor rotations caused by one rotation of the module. The generator fills it in for the modules it knows.
+
+## 2.5 Wheels and tread
+
+Swerve wheels are usually about 4 in (0.1 m) in diameter, with a replaceable tread on the rim. The tread decides how hard the robot can push and accelerate before the wheels slip ([Speed, Acceleration, and Traction §5.2](/docs/swerve-drive/performance#52-the-traction-limit)).
+
+Tread compresses under the robot's weight and wears through a season, so the real radius is a little smaller than the nominal one. A wheel radius that is 2% off makes every odometry distance 2% off. [Swerve Tuning §5.5](/docs/guides/swerve#55-wheel-radius) shows how to measure it on the robot. Check tread wear at every event.
+
+## 2.6 The gyro
+
+The **gyro** (or IMU, inertial measurement unit) measures the robot's heading. A swerve robot uses it for two things:
+
+1. **Field-relative driving.** The robot turns the driver's request from the field's frame into its own frame using the heading ([Swerve Kinematics §3.4](/docs/swerve-drive/kinematics#34-field-relative-driving)).
+2. **Odometry.** The heading from the gyro is much better than one worked out from the wheels ([Localization Basics](/docs/localization/basics#12-odometry-step-by-step)).
+
+CTRE's Pigeon 2 is a common choice. Let it calibrate while the robot is still. [§2.7](#27-the-drivetrain-as-a-whole) covers where to mount it.
+
+## 2.7 The drivetrain as a whole
+
+<DrivetrainLayout />
+
+- **Module placement.** Modules usually sit at the corners of the frame. The farther apart they are, the more stable the robot is and the more torque the wheels have to turn it. The distance from the robot's center to each module also sets how fast the robot can spin ([Speed, Acceleration, and Traction §5.6](/docs/swerve-drive/performance#56-turning)).
+- **Module positions in code.** The kinematics needs each steering axis's position from the robot's center, in meters, with $+x$ forward and $+y$ left ([Swerve Kinematics §3.1](/docs/swerve-drive/kinematics#31-chassis-speeds)). Measure them from the CAD, not the frame edge. On the 29 in frame above, each axis is about 0.29 m from the center in both directions, the square used on the Kinematics page. List the modules in the same order everywhere in the code.
+- **One module, or two versions.** The MK3 fits every corner, turned. A module whose footprint isn't symmetric, such as the MK5n, comes in two mirror-image versions. Diagonal corners take the same one, and neighboring corners take the other.
+- **The gyro.** Mount it flat, firmly, and near the center of the robot. Line its $x$ axis up with the robot's front, or tell the software how it is turned (the Pigeon 2's `MountPose` configs). A gyro that is tilted or loose reads the robot's turning wrong, and a heading error moves every field-relative command and every odometry step.
+- **Eight motors on CAN.** The four drive motors, four steer motors, four CANcoders, and the gyro all talk over CAN. A CTRE CANivore puts them on a faster CAN FD bus, which lets the swerve code read them more often. CTRE's `SwerveDrivetrain` runs odometry at 250 Hz on CAN FD by default ([Localization Basics §1.5](/docs/localization/basics#15-getting-better-odometry)).
+- **One battery.** All eight motors draw from the same battery. Current limits keep the wheels from slipping and the battery from sagging ([Speed, Acceleration, and Traction §5.5](/docs/swerve-drive/performance#55-current-and-the-battery)).
+
+## 2.8 The software pieces
+
+| Piece | What it does | Where to read more |
+|:---|:---|:---|
+| **Kinematics** | Turns a robot velocity into a speed and angle for each module, and back | [Swerve Kinematics](/docs/swerve-drive/kinematics) |
+| **Module control** | Points each module and spins its wheel, the short way round | [Commanding the Modules](/docs/swerve-drive/module-control) |
+| **Odometry** | Tracks the robot's pose from wheel distances, module angles, and the gyro | [Localization Basics](/docs/localization/basics) |
+| **Drive commands** | Turn joystick input or a planned path into a robot velocity | [Commanding the Modules §4.6](/docs/swerve-drive/module-control#46-from-joystick-to-motors) |
+
+WPILib has the math as plain classes (`SwerveDriveKinematics`, `SwerveModuleState`, `SwerveDriveOdometry`), and teams write the rest. CTRE's swerve API (`SwerveDrivetrain`, set up by the Tuner X Swerve Project Generator) does all of it, including a fast odometry thread. Team 2702 uses CTRE's API.

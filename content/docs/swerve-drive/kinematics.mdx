@@ -1,0 +1,174 @@
+---
+title: Swerve Kinematics
+description: The math that turns a robot velocity into a speed and angle for each swerve module. Field-relative driving, the center of rotation, desaturation, and forward kinematics.
+---
+
+**Kinematics** is the math of motion without forces. For a swerve drive, it answers one question: to move the robot at a given velocity, how fast must each wheel spin, and which way must it point? This page works through it. In short:
+
+1. **Describe the robot's motion with three numbers:** forward speed $v_x$, sideways speed $v_y$, and turn rate $\omega$.
+2. **Each module's velocity is the robot's velocity plus a turning part.** The turning part is $\omega$ times the module's distance from the center, at 90° to the line from the center to the module.
+3. **For field-relative driving, rotate the request by the gyro heading first.**
+4. **If any module would go faster than it can, slow all of them by the same factor.** That keeps the robot on its path.
+
+WPILib's `SwerveDriveKinematics` does all of this. CTRE's swerve requests do it too. Knowing the math helps you debug a robot that drives the wrong way.
+
+## 3.1 Chassis speeds
+
+The robot's velocity at one moment is three numbers, called **chassis speeds** (WPILib's `ChassisSpeeds` class):
+
+| Symbol | Meaning | Units |
+|:---|:---|:---|
+| $v_x$ | Speed forward, toward the robot's front | m/s |
+| $v_y$ | Speed to the robot's left | m/s |
+| $\omega$ | Turn rate, counterclockwise seen from above | rad/s |
+
+These use WPILib's robot frame: $+x$ forward, $+y$ left, and counterclockwise turns positive. Each module has a position $(x_i, y_i)$ in the same frame, measured from the robot's center. For a square drivetrain with modules 0.58 m apart, the front-left module is at $(0.29, 0.29)$ and the back-right at $(-0.29, -0.29)$.
+
+## 3.2 One module
+
+The robot is rigid, so every point on it moves with the center, plus a part from turning. A point at distance $r$ from the center, turning at $\omega$, moves at speed $\omega r$, at 90° to the line from the center. For a module at $(x_i, y_i)$, that gives:
+
+$$
+\begin{aligned}
+v_{x,i} &= v_x - \omega \, y_i \\
+v_{y,i} &= v_y + \omega \, x_i
+\end{aligned}
+$$
+
+The module's wheel speed and angle come from that vector:
+
+$$
+\text{speed}_i = \sqrt{v_{x,i}^2 + v_{y,i}^2}
+\qquad
+\text{angle}_i = \operatorname{atan2}(v_{y,i},\, v_{x,i})
+$$
+
+Where:
+- $\text{speed}_i$ is the wheel's speed along the carpet (m/s)
+- $\text{angle}_i$ is the direction the wheel must point, counterclockwise from the robot's front
+- $\operatorname{atan2}$ is the two-argument arctangent, which gives the angle in the right quadrant
+
+WPILib packs this into a matrix with two rows per module, and multiplies it by the chassis speeds:
+
+$$
+\begin{bmatrix} v_{x,1} \\ v_{y,1} \\ \vdots \\ v_{x,4} \\ v_{y,4} \end{bmatrix}
+=
+\begin{bmatrix} 1 & 0 & -y_1 \\ 0 & 1 & x_1 \\ \vdots & \vdots & \vdots \\ 1 & 0 & -y_4 \\ 0 & 1 & x_4 \end{bmatrix}
+\begin{bmatrix} v_x \\ v_y \\ \omega \end{bmatrix}
+$$
+
+That is `SwerveDriveKinematics.toSwerveModuleStates(speeds)`. It returns one `SwerveModuleState` (speed and angle) per module, in the order you listed the module positions.
+
+**Worked example.** Drive forward at 2 m/s while turning counterclockwise at 180°/s ($\omega = \pi$ rad/s), on the 0.58 m square. The front-left module at $(0.29, 0.29)$ gets:
+
+$$
+v_{x,FL} = 2 - \pi \cdot 0.29 = 1.09 \text{ m/s}
+\qquad
+v_{y,FL} = 0 + \pi \cdot 0.29 = 0.91 \text{ m/s}
+$$
+
+So it runs at 1.42 m/s, pointed 39.9° to the left. All four:
+
+| Module | Position (m) | Speed (m/s) | Angle |
+|:---|:---|:---|:---|
+| Front left | $(0.29, 0.29)$ | 1.42 | 39.9° |
+| Front right | $(0.29, -0.29)$ | 3.05 | 17.4° |
+| Back left | $(-0.29, 0.29)$ | 1.42 | −39.9° |
+| Back right | $(-0.29, -0.29)$ | 3.05 | −17.4° |
+
+The right-side modules go faster. They are on the outside of the turn.
+
+<SwerveKinematics />
+
+The widget starts at this example. The orange dashed line is where the robot will be over the next 0.75 s.
+
+Things to try:
+
+- **Set vx and vy to 0.** The robot spins in place. Every module points at 45° to the frame, along a circle around the center, and all four run at the same speed: $\pi \times 0.41 = 1.29$ m/s.
+- **Set ω to 0.** All four modules point the same way at the same speed. The robot slides without turning.
+- **Switch to Robot-relative.** The modules don't change, but the path does. It curves, because "forward" turns with the robot ([§3.4](#34-field-relative-driving)).
+- **Raise vx to 4 m/s.** The front-right module would need 5.0 m/s, more than it can give. Turn desaturation off to see the requested arrows that can't be reached ([§3.5](#35-desaturation)).
+
+## 3.3 The center of rotation
+
+At any moment, a turning robot is rotating around some point, the **instantaneous center of rotation**. Every module's velocity is at 90° to the line from that point to the module. That is why the dashed blue lines in the widget meet the module arrows at right angles.
+
+The center of rotation is at
+
+$$
+(x_c,\, y_c) = \left( -\frac{v_y}{\omega},\ \frac{v_x}{\omega} \right)
+$$
+
+in the robot frame. In the worked example it is 0.64 m to the robot's left ($2 / \pi$). Spinning in place puts it at the center. Driving fast while turning slowly puts it far away, and the modules point almost the same way.
+
+You can also choose the center of rotation. `toSwerveModuleStates(speeds, centerOfRotation)` turns the robot around any point, for example around a corner of the frame to pivot around a game element.
+
+## 3.4 Field-relative driving
+
+Drivers think in field directions: push the stick up, and the robot goes away from the driver station, whichever way it faces. The kinematics needs robot-relative speeds. So the code rotates the driver's request by the robot's heading $\theta$ from the gyro:
+
+$$
+\begin{aligned}
+v_x^{\text{robot}} &= v_x^{\text{field}} \cos\theta + v_y^{\text{field}} \sin\theta \\
+v_y^{\text{robot}} &= -v_x^{\text{field}} \sin\theta + v_y^{\text{field}} \cos\theta
+\end{aligned}
+$$
+
+$\omega$ is the same in both frames. In WPILib, this is `ChassisSpeeds.fromFieldRelativeSpeeds(vx, vy, omega, robotAngle)`. CTRE's `SwerveRequest.FieldCentric` does it for you.
+
+The code repeats this every loop with the new heading. So a field-relative robot that spins while it drives still goes in a straight line. A robot-relative request turns with the robot and drives an arc. Try it in the widget above: set a heading, then switch between the two.
+
+**Alliance direction.** WPILib's field frame has $+x$ pointing from the blue wall toward the red wall. A red-alliance driver faces the other way, so "stick up" should be $-x$. CTRE's `FieldCentric` request handles this through the **operator perspective**: by default (`ForwardPerspective = OperatorPerspective`) it rotates by a forward direction that your code sets on the drivetrain for each alliance. The Tuner X generated code sets it from the alliance color.
+
+**A wrong heading breaks it.** If the gyro's zero is off by 10°, every field-relative request is off by 10° too. Reset the heading only when the robot really faces a known direction, or set it from a vision pose.
+
+## 3.5 Desaturation
+
+Each module has a top speed, set by its motor and gearing ([Speed, Acceleration, and Traction §5.1](/docs/swerve-drive/performance#51-free-speed)). For a Kraken X60 (FOC) through 6.75:1 to a 4 in wheel, that is 4.57 m/s. The kinematics doesn't know about it. Ask for 4 m/s forward while turning at 180°/s, and the front-right module is told to go 4.995 m/s.
+
+If each module just clipped its own speed to 4.57 m/s, the outside modules would slow down and the inside ones wouldn't. The modules would no longer agree, and the robot would curve off its path. **Desaturation** fixes this by scaling every module by the same factor, so the fastest one is exactly at the limit:
+
+$$
+\text{scale} = \frac{v_{\text{max}}}{\max_i \text{speed}_i} = \frac{4.57}{4.995} = 0.915
+$$
+
+Every module, and so the whole robot, slows to 91.5% of the request. The robot goes the same direction and turns at the same rate relative to its speed, just a little slower.
+
+In WPILib, call `SwerveDriveKinematics.desaturateWheelSpeeds(states, maxSpeed)` after `toSwerveModuleStates`. It changes the array in place. CTRE's swerve requests do it by default (`DesaturateWheelSpeeds` is true).
+
+**Translation and rotation share the same speed.** A module's speed is the robot's speed plus its turning speed. At full speed forward, there is nothing left over for turning, so a hard turn slows the whole robot. Teams that want to keep turning authority at full speed limit the driver's translation speed below the module's top speed.
+
+## 3.6 Forward kinematics
+
+The reverse problem matters for odometry: from the measured module speeds and angles, what is the robot doing? Four modules give eight equations for three unknowns ($v_x$, $v_y$, $\omega$). They never agree exactly, because of noise and slip, so WPILib finds the chassis speeds that fit them best (a **least-squares** fit, using the matrix's pseudoinverse). That is `toChassisSpeeds(states)`, and `toTwist2d` does the same for the distance each module moved. [Localization Basics §1.2](/docs/localization/basics#12-odometry-step-by-step) uses it.
+
+When one wheel slips, it disagrees with the other three. Some teams measure that disagreement to detect slip.
+
+## 3.7 Skew and discretization
+
+**Discretize every request before the kinematics.** CTRE's `FieldCentric` request does it for you. With WPILib, call `ChassisSpeeds.discretize(speeds, dt)`, where `dt` is the loop period. Without it, a robot that spins while it drives drifts off its path.
+
+**Why it drifts.** The robot code sends a new command every loop, often every 20 ms, and the modules hold it until the next one. A held robot-relative command turns with the robot, so during the loop the robot drives a small arc instead of a straight line ([§3.4](#34-field-relative-driving)). On average, the robot moves in the direction it was asked to at the middle of the loop, not the start. So every loop's movement is turned by half the loop's turn, toward the spin. This is called **skew**. At 360°/s and 50 Hz, the robot turns 7.2° per loop, so it drives 3.6° off course, the same way every loop.
+
+**What discretizing does.** `discretize` works out the robot-relative speeds that, held for one loop along an arc, end exactly where the request meant the robot to be. The same arc math is behind odometry's pose exponential ([Localization Basics §1.3](/docs/localization/basics#13-integrating-the-pose-exponential)). The robot still bends a little inside each loop, but it is back on the line at the end of every loop.
+
+<SwerveSkew />
+
+At the defaults (3 m/s along the field while spinning at 360°/s):
+
+| Command rate | Turn per loop | Not discretized, after 4 m | Discretized, after 4 m |
+|:---|:---|:---|:---|
+| 50 Hz | 7.2° | 25 cm (3.6° off course) | 0 cm |
+| 100 Hz | 3.6° | 13 cm (1.8° off course) | 0 cm |
+| 250 Hz | 1.44° | 5.0 cm (0.72° off course) | 0 cm |
+
+Things to try:
+
+- **Press Replay.** Both robots spin the same way. The orange one slides steadily to the side of the line.
+- **Change the speed.** The angle off course stays the same. It depends only on how far the robot turns in one loop, not on how fast it drives.
+- **Double the spin rate, or halve the command rate.** Either one doubles the turn per loop, and the error doubles too.
+- **Set the spin rate to 0.** The two paths match. Skew only happens while the robot turns.
+
+Odometry and control need the arc fix separately. A robot can have perfect odometry and still drift from skew, and the odometry will faithfully report the drift.
+
+CTRE's `RobotCentric` request doesn't discretize. WPILib's documentation also warns that scaling speeds after discretizing (as desaturation does) brings some of the skew back. That error is small next to the skew of not discretizing at all.

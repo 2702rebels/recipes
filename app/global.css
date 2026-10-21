@@ -23,6 +23,9 @@
   --color-tag-ink: oklch(0.15 0 0);
   --color-tag-paper: oklch(0.98 0 0);
 
+  /* Bare aluminum, for frame tube and other structure in diagrams. */
+  --color-metal: oklch(0.72 0.015 240);
+
   /* Tuning procedure colors by output family (components/procedure.tsx). */
   --color-procedure-voltage: oklch(0.52 0.1 190);
   --color-procedure-torque: oklch(0.5 0.16 295);
@@ -36,6 +39,8 @@
   --color-plot-danger: oklch(0.7 0.2 25 / 0.25);
   --color-plot-zone-1: oklch(0.7 0.12 250 / 0.14);
   --color-plot-zone-2: oklch(0.78 0.13 75 / 0.14);
+
+  --color-metal: oklch(0.58 0.015 240);
 
   --color-procedure-voltage: oklch(0.78 0.1 190);
   --color-procedure-torque: oklch(0.76 0.13 295);
@@ -158,6 +163,7 @@ html > body[data-scroll-locked] {
     --color-plot-danger: oklch(0.63 0.22 25 / 0.18);
     --color-plot-zone-1: oklch(0.62 0.13 250 / 0.1);
     --color-plot-zone-2: oklch(0.72 0.14 75 / 0.14);
+    --color-metal: oklch(0.72 0.015 240);
     --color-procedure-voltage: oklch(0.52 0.1 190);
     --color-procedure-torque: oklch(0.5 0.16 295);
     --color-procedure-general: oklch(0.5 0.04 250);

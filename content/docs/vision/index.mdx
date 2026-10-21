@@ -51,9 +51,9 @@ After this section, [Localization](/docs/localization) covers what to do with th
 | Odometry drifts | Wheel and gyro errors add up and never correct themselves. | [Why Vision](/docs/vision/localization#12-odometry-fast-smooth-and-drifting) |
 | Vision is absolute | Each measurement is made against fixed landmarks, so errors don't pile up. | [Why Vision](/docs/vision/localization#13-vision-absolute-but-noisy) |
 | Fuse them | Odometry for smooth, fast updates. Vision to pull the estimate back to the truth. | [Why Vision](/docs/vision/localization#14-fusing-odometry-and-vision) |
-| Relative vs. global | Relative ignores field layout errors. Global works with any tag and fills gaps with odometry. | [Positioning](/docs/vision/positioning#25-choosing-an-approach) |
+| Relative vs. global | Relative ignores field layout errors. Global works with any tag and fills gaps with odometry. | [Relative vs. Global Positioning](/docs/vision/positioning#25-choosing-an-approach) |
 | Error grows with distance squared | A tag half as big in the image gives four times the range error. | [Pose Estimation](/docs/vision/pose-estimation#43-how-far-away-is-the-tag) |
 | One tag, two answers | A single tag's orientation is weak, and a second, wrong pose fits almost as well. | [Pose Estimation](/docs/vision/pose-estimation#443-the-planar-ambiguity) |
 | More tags, one solve | Solve over all visible corners at once. | [Pose Estimation](/docs/vision/pose-estimation#45-many-tags-one-solve) |
-| Calibrate every camera | A 3% focal length error is a 3% range error, at every distance. | [Calibration](/docs/vision/calibration#53-how-calibration-errors-become-pose-errors) |
-| Rolling shutters shear tags | A turning robot makes a rolling-shutter tag look turned. Use a global shutter, or the gyro heading and per-row timestamps. | [Calibration](/docs/vision/calibration#56-rolling-vs-global-shutter) |
+| Calibrate every camera | A 3% focal length error is a 3% range error, at every distance. | [Camera Calibration](/docs/vision/calibration#53-how-calibration-errors-become-pose-errors) |
+| Rolling shutters shear tags | A turning robot makes a rolling-shutter tag look turned. Use a global shutter, or the gyro heading and per-row timestamps. | [Camera Calibration](/docs/vision/calibration#56-rolling-vs-global-shutter) |

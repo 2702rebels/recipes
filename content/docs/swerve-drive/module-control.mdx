@@ -1,0 +1,93 @@
+---
+title: Commanding the Modules
+description: How a swerve module follows its speed and angle. Turning the short way, continuous wrap, cosine compensation, holding still, and the full path from joystick to motor.
+---
+
+The kinematics gives each module a target: a wheel speed and an angle. This page covers how a module gets there quickly and without upsetting the robot. In short:
+
+1. **Each module runs two loops.** A position loop on the steer motor and a velocity loop on the drive motor.
+2. **Never turn more than 90°.** If the target is farther than that, turn the other way and run the wheel backward.
+3. **Let the steer loop wrap around.** 179° and −179° are 2° apart, not 358°.
+4. **Slow the wheel while it still points the wrong way.** Scale its speed by the cosine of the angle error.
+
+## 4.1 Two loops per module
+
+A `SwerveModuleState` has two parts, and each goes to its own motor:
+
+| Target | Motor | Loop | Gains tuned in |
+|:---|:---|:---|:---|
+| Angle | Steer | Position, in module rotations | [Swerve Tuning §5.2](/docs/guides/swerve#52-steer-motors) |
+| Speed | Drive | Velocity, in wheel speed converted to rotor rotations/s | [Swerve Tuning §5.3](/docs/guides/swerve#53-drive-motors) |
+
+The two loops run on the motor controllers themselves, at 1 kHz, not in the robot code. The robot code only sends new targets each loop. The team's default is torque-current for drive and voltage for steer ([Choosing a Control Mode §4.3](/docs/guides/ctre/selection#43-mixed-mode-strategies) explains why).
+
+## 4.2 Never turn more than 90°
+
+A wheel pointing at 10° and spinning backward pushes the same way as a wheel pointing at 190° and spinning forward. So any target angle can be reached two ways, and one of them is always within 90° of where the module points now.
+
+**Example.** A module points at 10°. The kinematics asks for 170° at 2 m/s.
+
+| Option | Turn needed | Wheel speed |
+|:---|:---|:---|
+| Turn to 170° | 160° | +2 m/s |
+| Turn to −10° (170° − 180°) and reverse | 20° | −2 m/s |
+
+The second option turns eight times less, so the wheel pushes the right way much sooner. This is called **optimizing** the module state. Without it, a driver who reverses the stick makes every module spin half a turn before the robot moves.
+
+In WPILib, call `state.optimize(currentAngle)` on each state before sending it. It flips the state when the target is more than 90° from `currentAngle`. (The older static `SwerveModuleState.optimize(state, angle)` is deprecated.) CTRE's swerve API takes unoptimized states and optimizes them itself.
+
+## 4.3 Continuous wrap
+
+Angles wrap around: 179° and −179° are only 2° apart. A plain position loop doesn't know that. Asked to go from 179° to −179°, it turns 358° the long way.
+
+Phoenix 6 handles this with `ClosedLoopGeneral.ContinuousWrap`. With it on, the motor wraps the position error into half a rotation either way, so it always turns the short way. CTRE's swerve API turns it on for every steer motor. If you write your own module code, turn it on yourself, with the steer motor's position in module rotations (the gear ratio set in `RotorToSensorRatio` or `SensorToMechanismRatio`).
+
+## 4.4 Cosine compensation
+
+Right after a new target, the module is still turning. The wheel points the wrong way, so spinning it at full speed pushes the robot partly sideways. **Cosine compensation** scales the wheel speed by the cosine of the angle error:
+
+$$
+\text{speed}_{\text{sent}} = \text{speed}_{\text{target}} \cdot \cos(\text{angle}_{\text{target}} - \text{angle}_{\text{now}})
+$$
+
+| Angle error | Speed sent |
+|:---|:---|
+| 0° | 100% |
+| 30° | 87% |
+| 60° | 50% |
+| 90° | 0% |
+
+The part of the wheel's push that points the right way is the same with or without it. What it removes is the sideways push from a module that hasn't finished turning. In WPILib, call `state.cosineScale(currentAngle)` after `optimize`. Optimizing first keeps the error within 90°, so the cosine is never negative.
+
+## 4.5 Holding still
+
+When the driver lets go of the stick, every module is asked for zero speed. The kinematics can't find an angle for a zero velocity. WPILib's `toSwerveModuleStates` keeps each module's last angle instead of snapping it to 0°. That stops the modules from turning every time the robot stops.
+
+To resist being pushed while stopped, point the modules in an X, each one along the line to the robot's center. Any push or turn then has to drag wheels sideways across the carpet. CTRE's `SwerveRequest.SwerveDriveBrake` does this.
+
+## 4.6 From joystick to motors
+
+Putting the pages together, here is what happens every loop for a field-relative teleop drive. CTRE's `FieldCentric` request does steps 3 to 6. Its modules optimize each state and run the loops.
+
+1. **Read the sticks** and apply a **deadband**, so a stick that doesn't center perfectly doesn't creep the robot.
+2. **Scale to speeds.** Multiply by the robot's top speed and top turn rate. Many teams square the stick input first, for finer control at low speed.
+3. **Rotate to the robot frame** with the gyro heading, after flipping for the red alliance ([§3.4](/docs/swerve-drive/kinematics#34-field-relative-driving)).
+4. **Discretize** for the loop time ([§3.7](/docs/swerve-drive/kinematics#37-skew-and-discretization)).
+5. **Inverse kinematics** to get each module's speed and angle ([§3.2](/docs/swerve-drive/kinematics#32-one-module)).
+6. **Desaturate** so no module is over its top speed ([§3.5](/docs/swerve-drive/kinematics#35-desaturation)).
+7. **Optimize** each module to turn 90° or less ([§4.2](#42-never-turn-more-than-90)), and apply **cosine compensation** ([§4.4](#44-cosine-compensation)).
+8. **Run the loops.** The steer motor goes to the angle, and the drive motor to the speed, converted from m/s to rotor rotations/s with the wheel radius and drive ratio.
+
+Autonomous works the same way from step 4. A path follower produces chassis speeds directly, from the planned path and the robot's measured pose.
+
+## 4.7 Common problems
+
+| Symptom | Likely cause |
+|:---|:---|
+| One module points the wrong way at power-up | Wrong encoder offset for that module ([§2.3](/docs/swerve-drive/anatomy#23-the-absolute-encoder)) |
+| One wheel spins backward against the others | Offset off by 180°, or the drive motor's inversion is wrong |
+| Robot turns when asked to drive straight | Module positions listed in a different order from the modules, or an offset off by a few degrees |
+| Robot drives the wrong way field-relative | Gyro heading not zeroed, gyro counting clockwise as positive, or operator perspective not set for the alliance |
+| Robot drifts sideways while spinning and driving | Not discretizing, or odometry and control loops running slowly |
+| Modules jitter when stopped | Steer kP too high, or modules being sent to 0° at zero speed |
+| Robot moves less than odometry says | Wheel radius too large ([Swerve Tuning §5.5](/docs/guides/swerve#55-wheel-radius)) or wheels slipping |
