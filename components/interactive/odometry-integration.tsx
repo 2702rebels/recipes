@@ -241,7 +241,7 @@ export const OdometryIntegration = () => {
     let id = 0;
     let last = performance.now();
     const tick = (now: number) => {
-      const next = Math.min(1, progressRef.current + (now - last) / PLAYBACK_MS);
+      const next = Math.min(1, progressRef.current + Math.max(0, now - last) / PLAYBACK_MS);
       last = now;
       progressRef.current = next;
       setProgress(next);
