@@ -36,6 +36,7 @@ lib/turret-sim.ts        Pure step-response simulation used by the tuning sandbo
 lib/procedures.ts        Index of tuning procedures (anchors) for the index page and jump links.
 lib/vision.ts            Camera projection and PnP solver (homography + Levenberg-Marquardt) for the Vision pages.
 lib/vision-sims.ts       Monte Carlo and sweep scenarios built on lib/vision.ts. lib/odometry-sim.ts is the drift sim.
+lib/object-detection.ts  Ray-traced field scene, HSV color pipeline, simulated neural network detector, and box-to-floor geometry for the Object Detection pages.
 lib/localization-sim.ts  Odometry integration, 1-D Kalman filter, WPILib estimator, and factor-graph smoother for the Localization pages.
 lib/superstructure.ts    Side-view elevator-and-arm model and move sequencing for the Superstructure page.
 lib/swerve.ts            Swerve kinematics, desaturation, and the drive gearing and traction model for the Swerve Drive pages.
@@ -63,7 +64,7 @@ These rules apply to all prose: pages, callouts, component labels and captions, 
 - **Verify Phoenix 6 API claims** (config names, defaults, behavior) against the current CTRE documentation or API reference before writing them. If something cannot be verified, leave it out or mark it clearly.
 - **Keep numbers consistent.** Worked examples must use constants from `lib/motors.ts` / the Motor Constants page, and must be recomputed when those change. Say which commutation (FOC or trapezoidal) a number assumes.
 - **Don't overstate torque-current mode.** It is still limited by supply voltage and back-EMF. Current limits apply in both output families.
-- **Vision pages stay implementation-neutral.** Explain concepts and math, and don't document specific off-the-shelf vision products. The team's own pipeline is covered separately. WPILib and OpenCV APIs are fine to name.
+- **Vision and Object Detection pages stay implementation-neutral.** Explain concepts and math, and don't document specific off-the-shelf vision products. The team's own pipeline is covered separately. WPILib and OpenCV APIs are fine to name.
 - **Name the frame and axis convention.** Field and robot frames use WPILib axes (x forward, y left, z up). Camera frames use OpenCV axes (x right, y down, z forward). Vision numbers must come from `lib/vision.ts` and its `DEFAULT_CAMERA` (1280×800, 70°) and be recomputed if those change.
 - **Verify WPILib claims against the source for the season's release**, for example `allwpilib` at tag `v2026.2.2`, not `main`. `main` is the next season's code, with renamed packages. The Localization pages describe `PoseEstimator.java` in detail (fixed gain, 1.5 s buffer, clamped timestamps), so recheck them when WPILib changes it.
 - **Label community projects as such.** Name them, link them, and date their status ("experimental as of September 2026"). Don't present them as official WPILib or vendor features.

@@ -1,0 +1,69 @@
+---
+title: Do You Need Object Detection?
+description: What object detection is, how FRC teams use it, what it costs, and when a simpler approach works better.
+---
+
+Object detection is one of the most fun things to build on a robot, and one of the easiest to build when it isn't needed. This page helps you decide.
+
+**The short version:** use object detection when game pieces end up in places you can't predict and the robot has to go get them, by itself or to help the driver. Skip it when pieces start at known spots, when the intake is forgiving enough that the driver can line up by eye, or when the target has an AprilTag on it.
+
+## 1.1 What object detection is
+
+**Object detection** finds things in a camera image and draws a **bounding box** (the smallest upright rectangle that holds the object) around each one. Each box comes with a **label** (what kind of object it is) and usually a **score** (how sure the detector is).
+
+It answers a different question from AprilTags:
+
+| | AprilTags | Object detection |
+|:---|:---|:---|
+| **Looks for** | Printed markers at known places on the field | Objects with no marker, anywhere on the field |
+| **Answers** | Where am I on the field? | Where is that thing, relative to me? |
+| **Output** | Tag ID and four corners, then a pose | A box per object, then an angle and a distance |
+| **Precision** | Centimeters, from exactly known geometry | Rougher. Pieces get squashed, hidden, and cut off at the image edge |
+
+The two work well together. AprilTags keep the robot's field pose accurate (see [Vision](/docs/vision)), and that pose turns a detected piece into a point on the field.
+
+## 1.2 How FRC teams use it
+
+- **Driver assist for intaking.** The driver points the robot at a piece and holds a button. The robot turns to center the piece, or drives the last meter to it. This is the most common use, and the safest, because the driver stays in charge.
+- **Autonomous pickup.** In autonomous, pieces get bumped by other robots or bounce off field elements. A routine that looks for the piece picks it up even when it isn't where the plan said it would be.
+- **Choosing where to go.** When many pieces are loose on the field, the robot can head for the closest one or the biggest group.
+- **Seeing other robots.** A few teams detect robots to avoid them or to play defense. This is rare and advanced.
+
+Recent games show which pieces are easy and which are hard:
+
+| Game | Game piece | What it means for detection |
+|:---|:---|:---|
+| **2022 Rapid React** | Cargo: red and blue balls | Alliance colors made color detection the obvious choice, and the robot could ignore the other alliance's cargo |
+| **2023 Charged Up** | Yellow cones and purple cubes | Two strong colors, and two different shapes that a detector also had to tell apart |
+| **2024 Crescendo** | Notes: orange foam rings | Bright orange on gray carpet. Color worked well, and many teams also used trained models |
+| **2025 Reefscape** | Coral (white PVC tubes) and algae (teal balls) | White coral looks like tape lines, lights, and field elements, so color fails and a trained model is needed. Algae could be found by color |
+| **2026 Rebuilt** | Fuel: yellow foam balls, hundreds on the field | Balls touch and pile up. A color blob can be one ball or ten. A trained model can box each ball |
+
+## 1.3 When you don't need it
+
+- **The piece is always in the same place.** Pieces staged at known spots for autonomous don't need a camera. Drive a path there with odometry and AprilTags. Detection only helps once pieces start moving around.
+- **The intake is forgiving.** A wide "touch it, own it" intake ([What makes a good intake](/docs/mechanisms/intakes#21-what-makes-a-good-intake)) picks up anything the robot drives over. A good intake is worth more than a good detector.
+- **You want to know whether you are holding a piece.** Use a sensor in the intake, not a camera ([Knowing when you have a piece](/docs/mechanisms/intakes#25-knowing-when-you-have-a-piece)).
+- **The target has an AprilTag.** Scoring locations and human player stations carry tags. Use them ([Relative vs. Global Positioning](/docs/vision/positioning)).
+- **The basics aren't done yet.** A reliable drivetrain, repeatable autonomous routines, and AprilTag localization win more matches. Detection is a layer on top of them.
+
+## 1.4 What it costs
+
+- **Hardware.** A camera, a coprocessor to run the detector, and for machine learning usually an accelerator chip. All of it needs mounting, power, and a network connection.
+- **Time, every season.** A color pipeline has to be tuned for each new piece and re-checked at each venue. A trained model needs hundreds of labeled images of the new piece before it works at all.
+- **Risk.** A false detection can drive the robot into a wall or another robot. Every automatic action needs limits: the driver holds a button, the action times out, and detections that make no sense are ignored.
+- **Delay.** By the time a result reaches robot code, the image is tens of milliseconds old, and the robot has moved. Handling this is part of the work ([Using detections in robot code](/docs/object-detection/pipeline#24-using-detections-in-robot-code)).
+
+## 1.5 Choosing an approach
+
+| Situation | Use |
+|:---|:---|
+| Pieces start at known spots and stay there | Paths and odometry. No detection |
+| Pieces end up anywhere, and autonomous has to pick them up | Object detection |
+| Drivers miss pieces near the bumper or behind other robots | Detection for driver assist, or a wider intake |
+| The piece has a bright color that nothing else on the field shares | A color pipeline ([Color Detection](/docs/object-detection/color)) |
+| The piece is white, gray, or black, or shares its color with bumpers or field elements | A trained model ([Machine Learning Detection](/docs/object-detection/machine-learning)) |
+| Many pieces touch or overlap | A trained model |
+| No coprocessor and little time | A color pipeline at low resolution, or skip detection this season |
+
+Next, [The Detection Pipeline](/docs/object-detection/pipeline) shows the stages every detector shares.

@@ -1,0 +1,59 @@
+---
+title: Object Detection
+description: Finding game pieces and robots with a camera. When object detection is worth it, how a detection pipeline is organized, color-based and machine learning detectors, and a playground to try both.
+---
+
+AprilTags tell a robot where it is. **Object detection** tells it where *things* are: a game piece on the carpet, a pile of balls, another robot. Nothing on those things is marked, so the camera has to recognize them by what they look like.
+
+This section explains when object detection helps and when it doesn't, how every detection pipeline is organized, and the two ways to build the detector itself: by **color**, with a few image processing steps, or with **machine learning**, using a trained neural network and usually a coprocessor with an accelerator. It ends with a playground that runs both pipelines on a simulated camera image, one stage at a time. How our own vision pipeline puts these ideas into practice is covered separately.
+
+<Callout title="What you need">
+  High-school algebra and trigonometry. The [Vision](/docs/vision) section helps, especially the pinhole camera on the
+  Pose Estimation page, but each idea is explained again where it is used. No machine learning background is needed.
+</Callout>
+
+## Where to start
+
+Read the pages in order. Each one builds on the one before.
+
+<Cards>
+  <Card
+    title="1. Do You Need Object Detection?"
+    href="/docs/object-detection/when-to-use"
+    description="What it is, how FRC teams use it, what it costs, and when a simpler approach works better."
+  />
+  <Card
+    title="2. The Detection Pipeline"
+    href="/docs/object-detection/pipeline"
+    description="The stages every detector shares, turning a box into an angle and a distance, latency, where it runs, and the usual libraries."
+  />
+  <Card
+    title="3. Color Detection"
+    href="/docs/object-detection/color"
+    description="HSV thresholds, cleaning the mask, finding and filtering blobs, tuning for a venue, and where color fails."
+  />
+  <Card
+    title="4. Machine Learning Detection"
+    href="/docs/object-detection/machine-learning"
+    description="How a neural network detector works, confidence and NMS, input size, training a model, and coprocessors with accelerators."
+  />
+  <Card
+    title="5. Pipeline Playground"
+    href="/docs/object-detection/playground"
+    description="Run a color pipeline and a simulated neural network on a camera image, stage by stage, and break them on purpose."
+  />
+</Cards>
+
+## Key ideas at a glance
+
+| Idea | One-line summary | Page |
+|:---|:---|:---|
+| Not always needed | Pieces at known spots, a forgiving intake, or an AprilTag on the target make detection unnecessary. | [Do You Need Object Detection?](/docs/object-detection/when-to-use#13-when-you-dont-need-it) |
+| Same outline every time | Capture, preprocess, detect, pick a target, locate, publish. Only the detect stage changes. | [The Detection Pipeline](/docs/object-detection/pipeline#21-the-stages) |
+| Angle is easy, distance is hard | The angle comes straight from the box. The distance depends on the camera's height and tilt, and 1° of tilt error is about 30 cm at 3 m. | [The Detection Pipeline](/docs/object-detection/pipeline#23-from-a-box-to-an-angle-and-a-distance) |
+| Results are old | Use the capture time, and the robot's pose at that time, not now. | [The Detection Pipeline](/docs/object-detection/pipeline#24-using-detections-in-robot-code) |
+| Color is fast but fragile | A bright, unique color on a matte piece works well. Lighting, look-alikes, white pieces, and piles break it. | [Color Detection](/docs/object-detection/color#36-where-color-fails) |
+| Lock the camera | Fixed exposure and fixed white balance, or the colors change under you. | [Color Detection](/docs/object-detection/color#34-tuning-the-thresholds) |
+| Networks learn from examples | A trained network recognizes shape and texture, not just color. It is only as good as its training images. | [Machine Learning Detection](/docs/object-detection/machine-learning#41-what-a-neural-network-detector-does) |
+| Small things vanish | The image is shrunk to the model input. A ball smaller than about 10 input pixels is easily missed. | [Machine Learning Detection](/docs/object-detection/machine-learning#43-input-size-and-small-objects) |
+| Accelerators make ML practical | A neural accelerator runs a small detector about ten times faster than a CPU. | [Machine Learning Detection](/docs/object-detection/machine-learning#45-coprocessors-and-accelerators) |

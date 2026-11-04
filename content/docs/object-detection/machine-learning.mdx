@@ -1,0 +1,117 @@
+---
+title: Machine Learning Detection
+description: How a neural network finds objects, confidence and non-maximum suppression, model input size and small objects, training a model for a new game piece, and the coprocessors and accelerators that run it.
+---
+
+A color pipeline follows rules you write. A **neural network** learns its own rules from examples: thousands of images where a person drew a box around every game piece. Because it learns shape, texture, and context as well as color, it can find white pieces, tell a ball from a bumper of the same color, and box each ball in a pile. The price is the work to collect and label images, and hardware fast enough to run it.
+
+## 4.1 What a neural network detector does
+
+A **convolutional neural network** passes the image through many layers. Each layer slides small filters across its input and combines the results. The first layers respond to edges and color patches. Deeper layers combine those into textures, curves, and parts, and the deepest respond to whole objects. Nobody programs these filters. **Training** adjusts millions of numbers inside the network, the **weights**, until its output matches the labeled boxes.
+
+Most FRC teams use a **single-stage detector**, such as the YOLO family ("You Only Look Once"). It divides the image into a coarse grid. For each cell, the network predicts a few boxes, and for each box a **confidence** (how sure it is that an object is there) and a class (which kind of object). One pass through the network produces every box at once, which is what makes it fast.
+
+The raw output is thousands of candidate boxes. Most are weak guesses on background. Several neighboring cells usually fire on the same object, so a real object gets a cluster of overlapping boxes. **Post-processing** turns this into a short list.
+
+## 4.2 Confidence and non-maximum suppression
+
+Post-processing has two steps:
+
+1. **Confidence threshold.** Drop every box whose confidence is below a set value, often between 0.25 and 0.5.
+2. **Non-maximum suppression (NMS).** Sort the remaining boxes by confidence. Keep the most confident one, then drop every other box that overlaps it too much. Repeat with the next box that is still left.
+
+Overlap is measured with **intersection over union** (IoU): the area two boxes share, divided by the area they cover together.
+
+$$
+\text{IoU} = \frac{\text{area of overlap}}{\text{area of union}}
+$$
+
+Two identical boxes have an IoU of 1, and two boxes that don't touch have 0. NMS drops a box when its IoU with a kept box is above the **NMS threshold**, often about 0.45 to 0.7.
+
+Both thresholds trade one kind of mistake for the other:
+
+| Setting | Too low | Too high |
+|:---|:---|:---|
+| **Confidence threshold** | False detections on background and look-alikes | Real pieces missed, especially far or partly hidden ones |
+| **NMS threshold** | Pieces that overlap in the image get merged into one | Duplicate boxes on a single piece |
+
+Two words describe the result. **Precision** is the share of reported boxes that are real pieces. **Recall** is the share of real pieces that get a box. Raising the confidence threshold raises precision and lowers recall. For driver assist, precision usually matters more: a phantom piece that pulls the robot sideways is worse than a missed one the driver can see.
+
+Some recent detectors are trained to output a single box per object and skip NMS. The confidence threshold still applies.
+
+## 4.3 Input size and small objects
+
+A network takes a fixed, square input, such as 320×320 or 640×640 pixels. The camera image is scaled down to fit, and the leftover space is filled with gray bars (**letterboxing**). Detail lost in that shrink is gone before the network sees the image.
+
+**Worked example.** The 1280×800, 70° camera used on the Vision pages has a focal length of about 914 px. A fuel ball 15 cm across is about $914 \times 0.15 / d$ pixels wide in the camera image, $d$ meters away. A 320×320 input keeps a quarter of the width:
+
+| Distance | Fuel width in the camera image | At 320×320 input | At 640×640 input |
+|:---|:---|:---|:---|
+| 2 m | 69 px | 17 px | 34 px |
+| 3 m | 46 px | 11 px | 23 px |
+| 4 m | 34 px | 9 px | 17 px |
+| 6 m | 23 px | 6 px | 11 px |
+
+As a rough rule, small detectors start missing objects less than about 10 pixels across in their input. At 320×320, a fuel ball is hard to find beyond about 4 m. At 640×640 the reach doubles, but the network does four times the work, because the work grows with the number of input pixels. A 41 cm algae ball is almost three times wider and stays easy to find much farther away.
+
+Models also come in sizes, often named nano, small, medium, and up. Bigger models are more accurate and slower. For FRC, the smallest models at 320 or 640 input are the usual choice, because a fast, slightly less accurate result is worth more than a slow, perfect one.
+
+## 4.4 Training a model
+
+You can sometimes start from a model or a labeled dataset another team shared for the season's game piece. Either way, a model works best when it has seen images like the ones your camera takes.
+
+1. **Collect images.** Use your robot's camera, mounted where it will be, at the angle it will be. Include near and far pieces, partly hidden pieces, piles, pieces next to bumpers and field elements, and many lighting conditions. Include images with no pieces at all. Record during practice and in matches, and keep adding images through the season.
+2. **Label them.** Draw a box around every piece in every image, with a tool such as CVAT or Label Studio. Be consistent about partly hidden pieces. Never leave a visible piece unlabeled, because the model then learns that pieces are background.
+3. **Split the set.** Keep about 20% of the images aside for checking. Put images from the same match or the same few seconds of video on the same side of the split. Nearly identical images on both sides make the check look better than the model really is.
+4. **Train from a pretrained model.** Start from weights already trained on a large general dataset, and train further on your images (**transfer learning**). This needs far fewer images than starting from nothing: a few hundred varied images can give a usable model for one distinctive piece. Training needs a GPU, and a cloud notebook works. Turn on **augmentation**, which makes random changes to each training image (flips, scaling, brightness and color shifts) so the model doesn't depend on details that change between venues.
+5. **Check it.** Training reports precision, recall, and **mAP** (mean average precision), a single score that combines both over many thresholds. Higher is better. Then look at the images it gets wrong. The mistakes tell you which images to add next.
+6. **Export and quantize.** Export the trained model, usually to ONNX first, then convert it for the coprocessor's accelerator. Most accelerators need **INT8 quantization**: the weights are stored as 8-bit integers instead of 32-bit decimals, which makes the model much faster with a small loss in accuracy. The converter needs a few hundred **calibration images**, ideally from your own camera, to choose the integer ranges.
+7. **Test on the robot.** Measure the real frame rate and delay, and look at results under the lighting of an actual field.
+
+## 4.5 Coprocessors and accelerators
+
+Running a network on a coprocessor's CPU works, but slowly. A small detector at 320×320 takes on the order of 100 ms per frame on a single-board computer's CPU, and about ten times less with a neural accelerator. These are rough figures. Measure your own model on your own hardware.
+
+| Option | Examples | Notes |
+|:---|:---|:---|
+| **CPU only** | Any single-board computer | No extra hardware. Fine for color pipelines. A few frames per second for a small network |
+| **Built-in NPU** | Single-board computers built on the Rockchip RK3588 | Common in FRC. Models are converted with Rockchip's RKNN Toolkit 2, usually to INT8 |
+| **Add-on accelerator** | Google Coral Edge TPU, Hailo-8 and Hailo-8L, on USB, M.2, or a Raspberry Pi add-on board | Each needs models compiled with its own tools. The Coral needs INT8 LiteRT models, and any operation it doesn't support falls back to the much slower CPU |
+| **GPU module** | NVIDIA Jetson | Most flexible and most powerful, running models through TensorRT. Costs more, and uses more power and space |
+
+Compare options by measured frames per second for the model you plan to run. Advertised TOPS figures (trillions of operations per second) don't predict that well, because how well a model fits a chip matters as much as raw speed.
+
+## 4.6 Strengths and limits
+
+**What a trained model does better than color:**
+
+- **Lighting.** A model trained on many venues barely notices a change in lighting.
+- **Look-alikes.** It uses shape and texture, so a yellow shirt is not a yellow ball.
+- **Pieces with no strong color,** such as white coral.
+- **Piles.** It boxes each piece, and can tell how many there are.
+- **Several kinds of object at once,** such as two game pieces and robots, from one network.
+
+**What it costs:**
+
+- **Data.** Every new game piece needs a new set of labeled images.
+- **Hardware.** Without an accelerator, a model is too slow for most uses.
+- **Confident mistakes.** A model can fail on things it never saw in training, such as a new venue's lighting or a robot with unusual colors, and it gives no warning. If all its images came from one venue, expect trouble at the next.
+- **Debugging.** A threshold can be read and reasoned about. A network's mistakes can only be studied by looking at many examples.
+
+Some teams combine the two: the network finds boxes, and a quick color check inside each box rejects obvious mistakes.
+
+## 4.7 Color or machine learning?
+
+| | Color pipeline | Trained model |
+|:---|:---|:---|
+| **Setup** | Tune a few thresholds, at each venue | Collect and label hundreds of images, then train |
+| **Hardware** | Any coprocessor CPU | A coprocessor with an accelerator |
+| **Speed** | A few milliseconds per frame | Tens of milliseconds with an accelerator |
+| **Lighting changes** | Sensitive | Robust, if trained on varied images |
+| **Look-alike colors** | Fooled unless filtered out | Mostly not fooled |
+| **White, gray, or black pieces** | Doesn't work | Works |
+| **Touching pieces** | One blob | One box each |
+| **Small, far pieces** | Found while a few pixels survive the area filter | Missed below about 10 input pixels |
+| **When it goes wrong** | Easy to see why | Hard to see why |
+
+Next, the [Pipeline Playground](/docs/object-detection/playground) runs both on the same image.

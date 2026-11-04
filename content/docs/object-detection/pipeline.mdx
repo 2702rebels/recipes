@@ -1,0 +1,120 @@
+---
+title: The Detection Pipeline
+description: The stages every object detector shares, how a box becomes an angle and a distance, handling latency in robot code, where the pipeline runs, and the libraries teams use.
+---
+
+Every object detection system, from a ten-line color script to a neural network on an accelerator, follows the same outline. Learn the outline once and any detector becomes easier to understand, tune, and debug.
+
+## 2.1 The stages
+
+<DetectionPipelineDiagram />
+
+1. **Capture.** The camera takes a frame. Record the time the frame was taken, because everything later depends on it. Fix the camera's exposure and white balance, so colors and brightness don't change on their own.
+2. **Preprocess.** Get the image into the form the detector expects. A color pipeline converts it to HSV (see [Why HSV](/docs/object-detection/color#32-why-hsv)). A neural network needs it scaled to a fixed input size. Either one may crop away parts of the image that can never hold a piece, such as the stands above the field.
+3. **Detect.** Find the objects. This is the only stage where color pipelines and neural networks differ. A color pipeline thresholds, cleans, and filters blobs. A network outputs candidate boxes, and post-processing drops weak and duplicate ones. Either way, the output is a **list of boxes**, each with a score.
+4. **Pick a target.** Choose one box to act on: the lowest in the image (usually the closest), the largest, the one nearest the center, or the most confident.
+5. **Locate.** Turn the box into an angle and a distance from the robot ([§2.3](#23-from-a-box-to-an-angle-and-a-distance)).
+6. **Publish.** Send the result to the robot, with the capture time, usually over NetworkTables.
+7. **Use it.** Robot code tracks the target over several frames, checks that it makes sense, and drives or aims ([§2.4](#24-using-detections-in-robot-code)).
+
+Keep the stages separate in code. Each one can then be tested on its own, and you can swap the detector without touching the rest. Save camera frames during practice and matches, too. Replaying saved frames through the pipeline is the fastest way to tune it and to find out why it failed.
+
+## 2.2 What a detection is
+
+A detection is a box in image coordinates, plus a label and a score:
+
+- **The box.** Pixels, measured from the top-left corner of the image: $u$ to the right and $v$ down, the same as on the [Pose Estimation](/docs/vision/pose-estimation) page. A box is usually stored as its left and top edges plus its width and height, or as its center plus its width and height.
+- **The label.** Which kind of object it is: "fuel", "algae", "robot". A color pipeline that looks for one color has only one label.
+- **The score.** For a network, its **confidence**, from 0 to 1. A color pipeline has no confidence, but the blob's size or shape can serve as a score.
+
+The box is all the robot gets. Everything about where the object is has to come from those four numbers and from what you know about the camera.
+
+## 2.3 From a box to an angle and a distance
+
+### 2.3.1 The angle
+
+The horizontal angle to the object comes from the column of the box center, $u$:
+
+$$
+\phi \approx -\arctan\frac{u - c_x}{f_x}
+$$
+
+$c_x$ is the image column that the camera's optical axis passes through (near the center), and $f_x$ is the focal length in pixels. Both come from [camera calibration](/docs/vision/calibration). The minus sign makes the angle positive to the left, as WPILib measures angles: counterclockwise is positive. An object right of center has a negative angle.
+
+Often the angle is all you need. To line up on a piece, turn until $\phi$ is zero, then drive forward until the intake has it.
+
+### 2.3.2 The distance
+
+A camera can't measure distance directly. But game pieces lie on the carpet, so their height is known, and that is enough. The camera sits at height $h$, tilted down by $\theta$. A ball of radius $r$ has its center at height $r$. The ray through the box center leaves the camera at an angle $\alpha$ below horizontal:
+
+$$
+\alpha = \theta + \arctan\frac{v - c_y}{f_y}
+$$
+
+The ray drops $h - r$ before it reaches the ball's center, so the horizontal distance is:
+
+$$
+d = \frac{h - r}{\tan\alpha}
+$$
+
+<GroundRangeDiagram />
+
+For a flat piece lying on the carpet, use $r = 0$. These two formulas treat the angle and the distance separately, which is close enough near the image center. For pieces far to the side, intersect the full 3D ray through the box center with the plane at height $r$. It is the same idea, done with the camera's rotation matrix, and it is what the [playground](/docs/object-detection/playground) does.
+
+**Worked example.** Take the 1280×800, 70° camera used on the Vision pages ($f_x = f_y \approx 914$ px, $c_y = 400$), mounted 0.6 m high and tilted down 10°. It sees a fuel ball (15 cm across, so $r$ = 0.075 m) 3 m ahead. The ray to the ball's center is $\alpha = \arctan(0.525 / 3) = 9.9°$ below horizontal, just above the optical axis, so the box center sits at about row 399.
+
+Now suppose the box is off by one pixel, or the camera's tilt is off by 1°:
+
+| Distance | 1 px error in the box row | 1° error in the camera tilt |
+|:---|:---|:---|
+| 1 m | 0.2 cm | about 4 cm |
+| 2 m | 0.9 cm | 13 to 15 cm |
+| 3 m | 1.9 cm | 28 to 34 cm |
+| 4 m | 3.4 cm | 48 to 62 cm |
+| 6 m | 7.6 cm | 1.0 to 1.5 m |
+
+Two lessons follow:
+
+- **Measure the camera's tilt carefully,** and check it after every repair. A 1° error moves a ball 3 m away by about 30 cm. This is the same extrinsics problem AprilTags have ([Extrinsics](/docs/vision/calibration#55-extrinsics-where-the-camera-is-on-the-robot)).
+- **Trust far distances less.** Errors grow quickly with distance, because a far ray meets the carpet at a shallow angle. The angle to the piece is much more reliable than its distance.
+
+### 2.3.3 Distance from size
+
+If the object's size is known, its width in pixels also gives a distance: $d \approx f_x D / w$, where $D$ is the real width and $w$ the box width in pixels. For the fuel ball at 3 m, $w$ is about 46 px, and each pixel of width error is about 6.6 cm of distance. This needs no tilt, but it fails when the piece is partly hidden or cut off at the edge of the image, or when the box is a little loose. Use it as a check on the ground-plane distance, not instead of it.
+
+### 2.3.4 Onto the field
+
+With the robot's field pose and the camera's position on the robot, the angle and distance become a point on the field. Use the robot's pose **at the time the frame was captured**, not its pose now. A field point stays still while the robot moves, which makes it much easier to track and to drive to.
+
+## 2.4 Using detections in robot code
+
+- **Handle the delay.** A result is old by the time it arrives: the exposure, the processing, and the network all add up. A robot at 4 m/s moves 40 cm in 100 ms. Publish the capture time with each result, and look up the robot's pose at that time from a buffer of recent poses. WPILib's `TimeInterpolatableBuffer` does this, and its pose estimators use the same trick for AprilTags ([WPILib Pose Estimators](/docs/localization/wpilib-estimator)).
+- **Track, don't react to single frames.** Detections flicker. Act on a piece only after it shows up in most of the last few frames, and keep the last good target for a moment after it disappears. Tracking it as a field point, smoothed with a filter ([Kalman Filters](/docs/localization/kalman-filters)), works better than chasing the newest box.
+- **Check that it makes sense.** Ignore pieces outside the field, farther than the camera can measure well, or behind the robot. Ignore a target that jumps a meter between frames.
+- **Keep the driver in charge.** Run automatic pickup while a button is held, stop on a timeout, and stop when the intake sensor says the piece is in.
+
+## 2.5 Where it runs
+
+- **On the roboRIO.** WPILib includes OpenCV and the CameraServer library, so a simple color pipeline can run on the roboRIO at low resolution. It competes with robot code for the processor, though, and can make the control loop late. Use it for experiments only.
+- **On a coprocessor.** A small single-board computer on the robot, connected over Ethernet, runs the pipeline and sends results over NetworkTables. A color pipeline runs comfortably on its CPU at a high frame rate.
+- **On a coprocessor with an accelerator.** A neural network needs special hardware to run fast: a **neural processing unit** (NPU), a chip built only for the math networks do. Some coprocessors have one built in, and others take one as an add-on. See [Coprocessors and accelerators](/docs/object-detection/machine-learning#45-coprocessors-and-accelerators).
+
+Give a coprocessor its own regulated power. Battery voltage sags when the drivetrain accelerates, and a coprocessor that reboots mid-match is worse than none.
+
+## 2.6 Libraries and tools
+
+| Library or tool | What it does | Used for |
+|:---|:---|:---|
+| **OpenCV** | Image processing: color conversion, thresholds, morphology, contours, drawing. Works from Python, C++, and Java (WPILib ships the Java bindings) | Color pipelines, and the pre- and post-processing around a network. Its `dnn` module can also run small networks on a CPU |
+| **NumPy** | Fast arrays in Python. OpenCV images in Python are NumPy arrays | Python pipelines |
+| **WPILib CameraServer and NetworkTables** | Camera streaming, and sending results to the robot. NetworkTables also has Python bindings (`pyntcore`) | Every pipeline |
+| **PyTorch** | Building and training neural networks | Training |
+| **Ultralytics YOLO** | Training, checking, and exporting YOLO-family detectors, built on PyTorch | Training |
+| **ONNX and ONNX Runtime** | A common file format for trained networks, and a runtime that runs them on a CPU | Moving a model from training to the robot |
+| **LiteRT (formerly TensorFlow Lite)** | A runtime for small devices. Google's Coral accelerator needs models compiled from this format | Running models |
+| **RKNN Toolkit 2, Hailo Dataflow Compiler, TensorRT, OpenVINO** | Converters and runtimes for specific chips: Rockchip NPUs, Hailo accelerators, NVIDIA GPUs, and Intel processors | Running models on an accelerator |
+| **CVAT, Label Studio** | Drawing boxes on images to build a training set | Training data |
+
+Off-the-shelf vision systems bundle many of these stages behind a web interface. The stages are still there, and knowing them is how you tune such a system and find out why it fails.
+
+Next, [Color Detection](/docs/object-detection/color) builds the detect stage from color alone.

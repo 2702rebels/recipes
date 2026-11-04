@@ -1,0 +1,51 @@
+---
+title: Pipeline Playground
+description: Run a color pipeline and a simulated neural network detector on a camera image, one stage at a time. Change the lighting, the camera, and every setting, and see which stage breaks.
+---
+
+The playground below runs a whole detection pipeline on a simulated camera image. The camera sits on a robot, 0.6 m above the carpet and tilted down 10°. It looks at game pieces, a robot or two, the field wall, and the stands behind it.
+
+## 5.1 How to use it
+
+1. **Pick a detector, a game piece, and a scene.** The pile scene has seven touching balls. The robots scene puts pieces next to bumpers.
+2. **Click a stage** in the row of boxes. The image shows that stage's output, and the settings below it belong to that stage. Each box also shows a one-line summary of its output, so you can see where things go wrong.
+3. **Read the results.** The readouts compare what the pipeline found with the pieces that are really in view. In the last stage, dashed boxes mark missed pieces, and "false" marks a box that isn't a piece.
+
+The **Capture** stage holds the scene, lighting, and camera settings. Both detectors share them.
+
+<DetectionPlayground />
+
+At the defaults (fuel, scattered, color pipeline), six balls are in view and the pipeline finds all six with no false detections. It targets the lowest ball in the image and places it 1.42 m away, within a few millimeters of the truth.
+
+## 5.2 Things to try: color
+
+Reset the widget before each one.
+
+1. **Turn off the horizon filter** (stage 4). Four false detections appear at the top of the image: people in yellow shirts in the stands. Nothing on the carpet can appear above the horizon, so that one filter removes them all.
+2. **Make the light cool** (stage 1, light color all the way to cool). The fuel's hue moves from about 24 to about 30, the edge of the range, and the pipeline finds nothing. Raise the hue high limit to 34 (stage 2) and all six come back. This is why you leave margin, and re-check at every venue.
+3. **Overexpose the camera** (stage 1, exposure 4×). The red and green channels clip, the hue shifts to about 30 again, and every ball is lost. The fix is less exposure, not a wider threshold.
+4. **Add sensor noise** (stage 1, noise 15). Stage 2 fills with speckles, and one ball breaks up and is lost. Now turn opening off in stage 3: the pipeline finds 155 blobs, and only the area filter keeps them out.
+5. **Lower the processing resolution** (stage 2, 160×100). The pipeline gets about four times faster, but the two farthest balls shrink to a few pixels and are lost. Small, far pieces are the first casualty of every speedup.
+6. **Switch to the pile scene.** The pile becomes one large blob. Only two of nine balls are found, and the pile counts as a false detection. For an intake, driving at the middle of a pile may be fine. For counting balls or measuring distance, it isn't.
+7. **Switch to algae and the robots scene, then make the light warm.** All four algae are found at neutral light. Under warm light their hue drops from about 88 to about 79, just under the range, and all four are lost.
+
+Also try algae in the scattered scene. The nearest ball overlaps a ball farther back in the image, though they are more than a meter apart on the floor. The two merge into one blob, and the target distance is about 20 cm off.
+
+## 5.3 Things to try: machine learning
+
+Switch the detector to **Machine learning**. At the defaults (320×320 input, on a neural accelerator), it finds four of the six balls in about 8 ms.
+
+1. **Look at the input** (stage 2). This is all the network gets. The two missed balls, the farthest ones, are only a few pixels across.
+2. **Change the input size.** At 640, all six are found, and the time goes up to about 26 ms. At 160, only the two nearest are found. Now set it to run on the CPU only: about 100 ms at 320, and almost 400 ms at 640.
+3. **Look at the raw output** (stage 3). Each ball has a cluster of overlapping boxes, and there are weak boxes on background clutter and on look-alikes.
+4. **Raise the NMS threshold to 0.9** (stage 4). Duplicates are no longer removed: five extra boxes, each a second box on a ball already found.
+5. **Lower the confidence threshold to 0.2.** All six balls are found now, but five false boxes come with them: four on yellow shirts in the stands and one on clutter. There is no setting that finds everything and nothing else. Cropping the stands out of the image before the network runs would remove four of the five.
+6. **Switch to the pile scene.** The network boxes four balls separately, and five at 640, where the color pipeline saw one blob. The balls it misses are mostly hidden behind others.
+7. **Train on one venue** (stage 3). At the venue's own lighting it still finds four, with one extra false box on a yellow shirt. Now make the light cool: it finds nothing. Switch back to many venues, and it finds four again under the same cool light.
+
+## 5.4 What the playground leaves out
+
+- **The network is simulated.** It is not a trained model. It produces the same kind of output as one: confident boxes on clear pieces, weaker ones on small, hidden, dark, or blown-out pieces, duplicates, and false boxes on look-alikes. The numbers show the trends, not what a real model would score.
+- **The processing times are rough figures** for a single-board computer, for comparing settings only.
+- **The image is 640×400**, half the 1280×800 camera used on the Vision pages, so the page stays fast. Pixel sizes on this page are therefore half those in the [input size table](/docs/object-detection/machine-learning#43-input-size-and-small-objects).
+- **There is no motion blur, lens distortion, or rolling shutter,** and the camera's height and tilt are known exactly. On a real robot, a tilt error moves every distance ([§2.3](/docs/object-detection/pipeline#232-the-distance)).

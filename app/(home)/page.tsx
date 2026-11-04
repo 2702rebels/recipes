@@ -1,4 +1,4 @@
-import { BookOpen, Camera, Cog, Gauge, GraduationCap, LocateFixed, Move } from "lucide-react";
+import { BookOpen, Camera, Cog, Gauge, GraduationCap, LocateFixed, Move, ScanSearch } from "lucide-react";
 import Link from "next/link";
 
 import type { ReactNode } from "react";
@@ -27,6 +27,12 @@ const SECTIONS: { title: string; href: string; description: string; icon: ReactN
     href: "/docs/vision",
     description: "How a robot finds itself on the field with a camera: AprilTags, PnP solving, and calibration.",
     icon: <Camera className="size-5" />,
+  },
+  {
+    title: "Object Detection",
+    href: "/docs/object-detection",
+    description: "Finding game pieces with a camera: the detection pipeline, color thresholds, and neural networks.",
+    icon: <ScanSearch className="size-5" />,
   },
   {
     title: "Localization",

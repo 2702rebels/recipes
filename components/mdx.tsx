@@ -4,6 +4,7 @@ import type { ComponentType } from "react";
 
 import { Callout } from "@/components/callout";
 import { FactorGraphDiagram } from "@/components/diagrams/localization";
+import { DetectionPipelineDiagram, GroundRangeDiagram } from "@/components/diagrams/object-detection";
 import { MechanismTypes } from "@/components/diagrams/mechanisms";
 import { RobotLayouts } from "@/components/diagrams/robot-layouts";
 import { DrivetrainComparison } from "@/components/diagrams/swerve";
@@ -20,6 +21,7 @@ import { PrintProcedures } from "@/components/procedure-print";
 import { Resettable } from "@/components/interactive/controls";
 import { BracketingSimulator } from "@/components/interactive/bracketing-simulator";
 import { CalibrationError } from "@/components/interactive/calibration-error";
+import { DetectionPlayground } from "@/components/interactive/detection-playground";
 import { DistortionGrid } from "@/components/interactive/distortion-grid";
 import { EstimatorGain } from "@/components/interactive/estimator-gain";
 import { ExpoExplorer } from "@/components/interactive/expo-explorer";
@@ -54,6 +56,7 @@ const resettable = <P extends object>(Widget: ComponentType<P>) => {
 const widgets = {
   BracketingSimulator: resettable(BracketingSimulator),
   CalibrationError: resettable(CalibrationError),
+  DetectionPlayground: resettable(DetectionPlayground),
   DistortionGrid: resettable(DistortionGrid),
   EstimatorGain: resettable(EstimatorGain),
   ExpoExplorer: resettable(ExpoExplorer),
@@ -84,10 +87,12 @@ export function getMDXComponents(components?: MDXComponents) {
     ProcedureIndex,
     ProcedureLinks,
     AprilTagAnatomy,
+    DetectionPipelineDiagram,
     DrivetrainComparison,
     DrivetrainLayout,
     FactorGraphDiagram,
     FrameChain,
+    GroundRangeDiagram,
     MechanismTypes,
     MK3Drawing,
     PinholeDiagram,

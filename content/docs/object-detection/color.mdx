@@ -1,0 +1,125 @@
+---
+title: Color Detection
+description: Finding game pieces by color. HSV thresholds, cleaning the mask with morphology, finding and filtering blobs, tuning for a venue, and where color detection fails.
+---
+
+A color pipeline finds pieces with a handful of simple image processing steps and no training. It runs fast on any coprocessor CPU, and every step can be seen and checked. It works well when the piece has a bright color that nothing else in view shares. It fails, sometimes all at once, when that isn't true.
+
+## 3.1 When color works
+
+Color detection works when **all** of these hold:
+
+- **The piece has a strong, saturated color,** such as the 2024 orange notes or the 2026 yellow fuel.
+- **Nothing else the camera sees has that color.** Watch out for bumpers, field elements, tape, lights, and people in the stands.
+- **The surface is matte.** Shiny pieces reflect the lights and turn white in spots.
+- **Pieces are mostly apart.** Touching pieces merge into one blob.
+
+If one of these fails, either work around it (crop the image, add shape filters) or use a [trained model](/docs/object-detection/machine-learning).
+
+## 3.2 Why HSV
+
+A camera stores each pixel as red, green, and blue (RGB). A yellow ball in shadow has lower values in all three channels than the same ball in light, so no simple RGB range catches both. **HSV** separates color from brightness:
+
+- **Hue** is which color: red, yellow, green, and so on around a color wheel.
+- **Saturation** is how strong the color is. Gray, white, and black have low saturation.
+- **Value** is how bright the pixel is.
+
+A shadow mostly lowers the value and leaves the hue alone, so one hue range works in light and shadow.
+
+OpenCV stores 8-bit HSV with **hue from 0 to 179** (degrees divided by 2, to fit in a byte) and saturation and value from 0 to 255. Other tools use 0 to 360 for hue, so check which scale a number is in. Typical OpenCV hues:
+
+| Color | Hue (OpenCV, 0 to 179) |
+|:---|:---|
+| Red | Near 0 and near 179. A red range wraps around, so use two ranges |
+| Orange | 5 to 20 |
+| Yellow | 20 to 35 |
+| Green | 40 to 80 |
+| Teal | 80 to 100 |
+| Blue | 100 to 130 |
+| Purple | 130 to 160 |
+
+The fuel ball in the [playground](/docs/object-detection/playground) has a hue of about 24 under neutral light, and the teal algae about 88.
+
+## 3.3 The pipeline in OpenCV
+
+1. **Convert to HSV.** `cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)`. OpenCV images are stored blue-green-red (BGR), not RGB.
+2. **Threshold.** `cv2.inRange(hsv, lower, upper)` keeps pixels whose hue, saturation, and value are all inside the range. The result is a **mask**: white where a pixel passes, black elsewhere.
+3. **Clean up.** `cv2.morphologyEx` with `MORPH_OPEN` removes specks, and `MORPH_CLOSE` fills holes ([§3.5](#35-cleaning-and-filtering)).
+4. **Find blobs.** `cv2.findContours` traces the outline of each connected group of white pixels. `cv2.connectedComponentsWithStats` does the same job and also returns each blob's area and box.
+5. **Filter.** Drop blobs that are the wrong size or shape, using `cv2.contourArea` and `cv2.boundingRect`.
+6. **Pick and locate.** Choose a target and turn its box into an angle and a distance ([§2.3](/docs/object-detection/pipeline#23-from-a-box-to-an-angle-and-a-distance)).
+
+In Python:
+
+```python
+import cv2
+import numpy as np
+
+# Fuel under neutral light. Hue 0-179, saturation and value 0-255.
+LOWER = np.array([18, 150, 90])
+UPPER = np.array([30, 255, 255])
+KERNEL = np.ones((3, 3), np.uint8)
+
+
+def find_pieces(frame_bgr, min_area=50):
+    hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, LOWER, UPPER)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, KERNEL)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, KERNEL)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    boxes = []
+    for c in contours:
+        area = cv2.contourArea(c)
+        x, y, w, h = cv2.boundingRect(c)
+        if area < min_area:
+            continue  # too small: noise, or too far away to use
+        if max(w / h, h / w) > 2:
+            continue  # a ball is about as wide as it is tall
+        if area / (w * h) < 0.5:
+            continue  # a ball fills about 0.79 of its box
+        boxes.append((x, y, w, h))
+    return boxes
+```
+
+## 3.4 Tuning the thresholds
+
+1. **Lock the camera settings.** Turn off auto exposure and auto white balance. In auto mode the camera changes its colors from frame to frame, and differently at every venue.
+2. **Lower the exposure.** Turn it down until the piece is bright but no channel is clipped at 255, and the background is darker. A clipped pixel loses its true color. When a golden-yellow ball is too bright, its red and green channels both clip at 255, and its hue shifts toward pure yellow, out of a tight range. A short exposure also cuts motion blur.
+3. **Sample the piece.** Look at its HSV values near and far, in light and shadow, and at the edges. Saved frames are best for this.
+4. **Set hue first, then saturation, then value.** Start wide. Narrow the hue until the background drops out, raise the minimum saturation until gray and white things drop out, then raise the minimum value until dark noise drops out. Leave some margin on every side.
+5. **Check against look-alikes.** Point the camera at bumpers, field elements, the driver station, and the stands. Anything that passes the threshold must be removed by a filter.
+6. **Re-check at every venue.** Event lighting differs from the practice field and from other events. Save frames from the first practice match and re-tune from them.
+
+## 3.5 Cleaning and filtering
+
+**Morphology** changes a mask with a small square called the **kernel**:
+
+- **Erode** keeps a white pixel only if the whole kernel around it is white. It shrinks blobs and removes specks smaller than the kernel.
+- **Dilate** makes a pixel white if any pixel under the kernel is white. It grows blobs and fills small holes.
+- **Open** is erode, then dilate. It removes specks of noise and leaves big blobs about the same size.
+- **Close** is dilate, then erode. It fills holes, such as the glare spot on top of a ball, and joins small gaps.
+
+Keep the kernel small compared with the smallest piece you need to find. Opening with a 5 px kernel erases a ball that is 4 px across.
+
+Then **filter the blobs.** Each filter removes one kind of mistake:
+
+| Filter | Removes | For a ball |
+|:---|:---|:---|
+| **Area** | Specks of noise, and pieces too far away to measure well | A minimum, in pixels or as a share of the image |
+| **Aspect ratio** (width over height) | Long thin things: bumpers, tape lines, field edges | Close to 1 |
+| **Fill** (blob pixels over box pixels) | Ragged or hollow shapes | About 0.79, which is $\pi / 4$ |
+| **Position** | Anything above the horizon, which can't be a piece on the carpet | Below the horizon row |
+| **Expected size** | Blobs too big or too small for their distance | Width close to $f_x D / d$, with $d$ from the box row |
+
+The last filter combines the two ways to get distance ([§2.3](/docs/object-detection/pipeline#23-from-a-box-to-an-angle-and-a-distance)). The row of the box gives a distance, and at that distance a real ball has a known width. A yellow shirt in the stands or a far piece of tape fails this check.
+
+## 3.6 Where color fails
+
+- **Lighting changes.** A warmer or cooler light shifts the hue. A threshold tuned tightly at home can miss every piece at an event.
+- **Look-alikes.** Anything with the piece's color passes the threshold: a bumper, a field element, a shirt in the stands. Shape and position filters remove some of them.
+- **White, gray, and black pieces.** These have almost no saturation, so hue means nothing. Lights, tape, metal, and polycarbonate look the same to a threshold.
+- **Touching pieces.** Two pieces that touch in the image become one blob, even if they are apart on the floor, one behind the other. A pile of balls becomes one big blob.
+- **Partly hidden pieces.** The blob covers only the visible part, so its center is not the piece's center, and the distance is off.
+- **Glare and clipping.** Shiny spots and overexposed pixels lose their color and leave holes in the mask.
+
+Every one of these can be seen in the [playground](/docs/object-detection/playground). When several apply to your game piece, a [trained model](/docs/object-detection/machine-learning) is the better tool.
