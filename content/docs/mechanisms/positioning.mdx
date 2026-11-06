@@ -5,7 +5,7 @@ description: How an FRC robot reaches high or far. Pivots, arms, elevators, and 
 
 Goals sit at different heights and distances, and the robot has to bring its scoring mechanism to each one. Three kinds of mechanism do this: **pivots** (and **arms**, which are long pivots), **elevators**, and combinations of the two. In short:
 
-1. **A pivot rotates. An elevator lifts.** A pivot's tip moves in an arc, so raising it also moves it in or out. An elevator moves straight up and down.
+1. **A pivot rotates. An elevator extends.** A pivot's tip moves in an arc, so raising it also moves it in or out. An elevator moves straight up and down.
 2. **Gravity loads them differently.** An arm is hardest to hold when it is horizontal and easiest when it points straight up or down. An elevator's load is the same at every height.
 3. **The rules shape the choice.** Height limits, reach limits, and goal heights change every year. A game with a low height limit has short pivots. A game with high goals has elevators.
 4. **Many robots combine them.** An elevator that carries a pivoting end effector reaches high goals and angles the piece to meet them. Then the two have to be coordinated ([The Superstructure](/docs/mechanisms/superstructure)).
@@ -27,7 +27,7 @@ The limits change every year, and they push robots toward different designs:
 | **2025 Reefscape** | L4 branches, 6 ft up | 3 ft 6 in at the start of the match | 18 in | Tall elevators, folded down at the start, carrying a pivoting end effector |
 | **2026 Rebuilt** | Hub opening, about 6 ft up | 30 in for the whole match | 12 in | Low robots with shooters to reach the hub. Many robots stayed under 22.25 in to drive through the trench |
 
-The 2024 and 2026 rows show the pattern: when the goal is far above the height limit, the robot shoots instead of reaching. The 2025 row shows the opposite: a high goal that a robot was allowed to reach up to, and a game piece that had to be placed, so elevators came back. The starting height limit meant they had to start folded down.
+The 2024 and 2026 rows show the pattern: when the goal is far above the height limit, the robot shoots instead of reaching. The 2025 row shows the opposite: a high goal that a robot was allowed to reach up to, and a game piece that had to be placed, so elevators where abundant. The starting height limit meant they had to start folded down.
 
 ## 4.2 Pivots and arms
 
@@ -44,21 +44,22 @@ What to know about pivots:
 - **The gravity load changes with angle.** Gravity pulls hardest on an arm when it is horizontal and not at all when it points straight up or down. The load follows the cosine of the angle from horizontal, which is why arms tune differently from elevators ([Five Mechanisms to Tune](/docs/mechanisms/control-types#61-the-five-types)).
 - **Long arms need a lot of torque.** Holding a load at the end of a long arm takes much more torque than holding it close to the axle. That means a large gear reduction, which makes the arm slower.
 - **Small errors grow at the tip.** A 1° error at the axle moves the tip of a 30 in arm by about half an inch ($30\,\text{in} \times \pi / 180 = 0.52\,\text{in}$). Gear backlash and flex in the arm add to it.
-- **Use an absolute encoder.** The motor's own encoder doesn't know the arm's angle at power-up. An absolute encoder on the axle does.
+- **Use an absolute encoder.** The motor's own encoder doesn't know the arm's angle at power-up. An absolute encoder on the axle does. Otherwise, you need to start the robot with the arm in a known position every time.
 - **An arm can swing over the robot.** That lets one arm score on both sides of the robot, which an elevator can't do. In 2023, some robots used this to pick up pieces on one side and score on the other.
 
 ## 4.3 Elevator or arm
 
-An **elevator** lifts a **carriage** straight up on rails. Belts, chain, or rope pull it, and constant-force springs sometimes help hold it up. To reach higher than the robot is tall, an elevator has **stages** that slide out of each other like a telescope. How the stages are pulled (rigged) changes how the elevator tunes ([Multi-Stage and Cascaded Elevators](/docs/guides/ctre/voltage#243-multi-stage-and-cascaded-elevators)).
+An **elevator** lifts a **carriage** straight up on rails. Belts, chain, or rope pull it, and constant-force springs sometimes help to lessen the effective weight the motor needs to move. To reach higher than the robot is tall, an elevator has **stages** that slide out of each other like a telescope. How the stages are pulled (rigged) changes how the elevator tunes ([Multi-Stage and Cascaded Elevators](/docs/guides/ctre/voltage#243-multi-stage-and-cascaded-elevators)).
 
 | | Elevator | Arm |
 |:---|:---|:---|
 | **Motion** | Straight up and down | An arc |
 | **Gravity load** | The same at every height | Largest when horizontal |
-| **Reach out from the robot** | None by itself | Up to the arm's length |
+| **Reach out from the robot** | None by itself* | Up to the arm's length |
 | **Parts** | Rails, bearings, rigging, stages | One axle and a gearbox |
 | **Weight up high** | The carriage and stages | The arm and what it carries |
 | **Can score on both sides** | No | Yes, if it can swing over |
+**An elevator can reach out of the robot if it is on an angle. 2023 had these kinds of robots.*
 
 Choose by what the goal needs:
 
